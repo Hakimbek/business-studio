@@ -69,6 +69,7 @@ interface Arrow {
   kind: "goal-goal" | "ind-goal";
   sourceId: string;
   targetId: string;
+  strength: number;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -81,13 +82,14 @@ const REGION_COLORS = [
 // ── SVG Links overlay ─────────────────────────────────────────────────────────
 
 function LinksOverlay({
-  board, cardRefs, canvasRef, onDeleteLink, onUnlinkIndicator, viewMode,
+  board, cardRefs, canvasRef, onDeleteLink, onUnlinkIndicator, onUpdateStrength, viewMode,
 }: {
   board: StrategyMapBoard;
   cardRefs: React.RefObject<Map<string, HTMLElement>>;
   canvasRef: React.RefObject<HTMLDivElement | null>;
   onDeleteLink: (id: string) => void;
   onUnlinkIndicator: (indicatorId: string, goalId: string) => void;
+  onUpdateStrength: (arrow: Arrow, strength: number) => void;
   viewMode: boolean;
 }) {
   const [arrows, setArrows] = useState<Arrow[]>([]);
@@ -107,7 +109,7 @@ function LinksOverlay({
       if (!s || !t) continue;
       const sr = s.getBoundingClientRect();
       const tr = t.getBoundingClientRect();
-      next.push({ id: link.id, sourceId: link.sourceGoalId, targetId: link.targetGoalId, kind: "goal-goal",
+      next.push({ id: link.id, sourceId: link.sourceGoalId, targetId: link.targetGoalId, kind: "goal-goal", strength: link.strength ?? 2,
         x1: sr.right - cr.left, y1: sr.top + sr.height / 2 - cr.top,
         x2: tr.left - cr.left,  y2: tr.top + tr.height / 2 - cr.top });
     }
@@ -118,7 +120,7 @@ function LinksOverlay({
       if (!s || !t) continue;
       const sr = s.getBoundingClientRect();
       const tr = t.getBoundingClientRect();
-      next.push({ id: il.id, sourceId: il.indicatorId, targetId: il.goalId, kind: "ind-goal",
+      next.push({ id: il.id, sourceId: il.indicatorId, targetId: il.goalId, kind: "ind-goal", strength: il.strength ?? 2,
         x1: sr.right - cr.left, y1: sr.top + sr.height / 2 - cr.top,
         x2: tr.left - cr.left,  y2: tr.top + tr.height / 2 - cr.top });
     }
@@ -154,23 +156,50 @@ function LinksOverlay({
         const d = `M ${a.x1} ${a.y1} C ${a.x1 + curve} ${a.y1} ${a.x2 - curve} ${a.y2} ${a.x2} ${a.y2}`;
         const mx = (a.x1 + a.x2) / 2;
         const my = (a.y1 + a.y2) / 2;
+        const sw = a.strength === 1 ? 1.5 : a.strength === 3 ? 4.5 : 2.5;
         return (
           <g key={a.id} style={{ pointerEvents: viewMode ? "none" : "all" }}>
             {!viewMode && (
               <path d={d} stroke="transparent" strokeWidth={18} fill="none" style={{ cursor: "pointer" }}
                 onMouseEnter={() => setHovered(a.id)} onMouseLeave={() => setHovered(null)} />
             )}
-            {!isH && <path d={d} stroke={color} strokeWidth={3} fill="none" opacity={0.25} filter="url(#glow)" style={{ pointerEvents: "none" }} />}
-            <path d={d} stroke={isH ? "#ef4444" : color} strokeWidth={isH ? 3 : 2} fill="none"
+            {!isH && <path d={d} stroke={color} strokeWidth={sw + 1} fill="none" opacity={0.2} filter="url(#glow)" style={{ pointerEvents: "none" }} />}
+            <path d={d} stroke={isH ? "#ef4444" : color} strokeWidth={isH ? sw + 0.5 : sw} fill="none"
               markerEnd={`url(#${markerId})`} className={isH ? undefined : "arrow-flow"}
               style={{ pointerEvents: "none", transition: "stroke 0.15s" }} />
             {isH && (
-              <g transform={`translate(${mx},${my})`} style={{ cursor: "pointer", pointerEvents: "all" }}
-                onClick={() => a.kind === "goal-goal" ? onDeleteLink(a.id) : onUnlinkIndicator(a.sourceId, a.targetId)}
-                onMouseEnter={() => setHovered(a.id)} onMouseLeave={() => setHovered(null)}>
-                <circle r={11} fill="white" stroke="#ef4444" strokeWidth={1.5} filter="url(#glow)" />
-                <line x1={-4} y1={-4} x2={4} y2={4} stroke="#ef4444" strokeWidth={2} strokeLinecap="round" />
-                <line x1={4} y1={-4} x2={-4} y2={4} stroke="#ef4444" strokeWidth={2} strokeLinecap="round" />
+              <g transform={`translate(${mx},${my})`}
+                onMouseEnter={() => setHovered(a.id)} onMouseLeave={() => setHovered(null)}
+                style={{ pointerEvents: "all" }}>
+                {/* Popup background */}
+                <rect x={-72} y={-15} width={144} height={30} rx={15} fill="white" stroke="#e5e7eb" strokeWidth={1} filter="url(#glow)" />
+                {/* Thin */}
+                <g transform="translate(-48,0)" style={{ cursor: "pointer" }}
+                  onClick={(e) => { e.stopPropagation(); onUpdateStrength(a, 1); }}>
+                  <rect x={-14} y={-13} width={28} height={26} rx={5} fill={a.strength === 1 ? "#eff6ff" : "transparent"} />
+                  <line x1={-9} y1={0} x2={9} y2={0} stroke={a.strength === 1 ? "#2563eb" : "#9ca3af"} strokeWidth={1.5} strokeLinecap="round" />
+                </g>
+                {/* Medium */}
+                <g transform="translate(-10,0)" style={{ cursor: "pointer" }}
+                  onClick={(e) => { e.stopPropagation(); onUpdateStrength(a, 2); }}>
+                  <rect x={-14} y={-13} width={28} height={26} rx={5} fill={a.strength === 2 ? "#eff6ff" : "transparent"} />
+                  <line x1={-9} y1={0} x2={9} y2={0} stroke={a.strength === 2 ? "#2563eb" : "#9ca3af"} strokeWidth={3} strokeLinecap="round" />
+                </g>
+                {/* Thick */}
+                <g transform="translate(28,0)" style={{ cursor: "pointer" }}
+                  onClick={(e) => { e.stopPropagation(); onUpdateStrength(a, 3); }}>
+                  <rect x={-14} y={-13} width={28} height={26} rx={5} fill={a.strength === 3 ? "#eff6ff" : "transparent"} />
+                  <line x1={-9} y1={0} x2={9} y2={0} stroke={a.strength === 3 ? "#2563eb" : "#9ca3af"} strokeWidth={5} strokeLinecap="round" />
+                </g>
+                {/* Separator */}
+                <line x1={48} y1={-8} x2={48} y2={8} stroke="#e5e7eb" strokeWidth={1} />
+                {/* Delete */}
+                <g transform="translate(60,0)" style={{ cursor: "pointer" }}
+                  onClick={() => a.kind === "goal-goal" ? onDeleteLink(a.id) : onUnlinkIndicator(a.sourceId, a.targetId)}>
+                  <rect x={-12} y={-13} width={24} height={26} rx={5} fill="transparent" />
+                  <line x1={-4} y1={-4} x2={4} y2={4} stroke="#ef4444" strokeWidth={1.8} strokeLinecap="round" />
+                  <line x1={4} y1={-4} x2={-4} y2={4} stroke="#ef4444" strokeWidth={1.8} strokeLinecap="round" />
+                </g>
               </g>
             )}
           </g>
@@ -505,8 +534,10 @@ function BoardView({ board, allGoals, allIndicators }: {
 
   const linkMut          = useMutation({ mutationFn: ({ sourceGoalId, targetGoalId }: { sourceGoalId: string; targetGoalId: string }) => fetch(`/api/strategy-map-boards/${board.id}/links`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sourceGoalId, targetGoalId }) }).then(r => r.json()), onSuccess: inv });
   const deleteLinkMut    = useMutation({ mutationFn: (linkId: string) => fetch(`/api/strategy-map-boards/${board.id}/links`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkId }) }), onSuccess: inv });
-  const addIndLinkMut    = useMutation({ mutationFn: ({ indicatorId, goalId }: { indicatorId: string; goalId: string }) => fetch(`/api/strategy-map-boards/${board.id}/indicator-links`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ indicatorId, goalId }) }).then(r => r.json()), onSuccess: inv });
-  const deleteIndLinkMut = useMutation({ mutationFn: ({ indicatorId, goalId }: { indicatorId: string; goalId: string }) => fetch(`/api/strategy-map-boards/${board.id}/indicator-links`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ indicatorId, goalId }) }), onSuccess: inv });
+  const addIndLinkMut          = useMutation({ mutationFn: ({ indicatorId, goalId }: { indicatorId: string; goalId: string }) => fetch(`/api/strategy-map-boards/${board.id}/indicator-links`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ indicatorId, goalId }) }).then(r => r.json()), onSuccess: inv });
+  const deleteIndLinkMut       = useMutation({ mutationFn: ({ indicatorId, goalId }: { indicatorId: string; goalId: string }) => fetch(`/api/strategy-map-boards/${board.id}/indicator-links`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ indicatorId, goalId }) }), onSuccess: inv });
+  const updateLinkStrengthMut  = useMutation({ mutationFn: ({ linkId, strength }: { linkId: string; strength: number }) => fetch(`/api/strategy-map-boards/${board.id}/links`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkId, strength }) }), onSuccess: inv });
+  const updateIndStrengthMut   = useMutation({ mutationFn: ({ indicatorId, goalId, strength }: { indicatorId: string; goalId: string; strength: number }) => fetch(`/api/strategy-map-boards/${board.id}/indicator-links`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ indicatorId, goalId, strength }) }), onSuccess: inv });
 
   // ── Ref-based drag ─────────────────────────────────────────────────────────
 
@@ -807,7 +838,11 @@ function BoardView({ board, allGoals, allIndicators }: {
 
             <LinksOverlay board={board} cardRefs={cardRefs} canvasRef={canvasRef} viewMode={viewMode}
               onDeleteLink={(id) => deleteLinkMut.mutate(id)}
-              onUnlinkIndicator={(indicatorId, goalId) => deleteIndLinkMut.mutate({ indicatorId, goalId })} />
+              onUnlinkIndicator={(indicatorId, goalId) => deleteIndLinkMut.mutate({ indicatorId, goalId })}
+              onUpdateStrength={(arrow, strength) => {
+                if (arrow.kind === "goal-goal") updateLinkStrengthMut.mutate({ linkId: arrow.id, strength });
+                else updateIndStrengthMut.mutate({ indicatorId: arrow.sourceId, goalId: arrow.targetId, strength });
+              }} />
           </div>
         </div>
       </div>

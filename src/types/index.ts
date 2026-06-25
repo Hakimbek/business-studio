@@ -99,6 +99,7 @@ export interface StrategyMapLink {
   boardId: string;
   sourceGoalId: string;
   targetGoalId: string;
+  strength: number;
 }
 
 export interface StrategyMapRegion {
@@ -126,6 +127,7 @@ export interface StrategyMapIndicatorLink {
   boardId: string;
   indicatorId: string;
   goalId: string;
+  strength: number;
 }
 
 export interface StrategyMapBoard {

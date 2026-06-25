@@ -12,6 +12,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json(link, { status: 201 });
 }
 
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id: boardId } = await params;
+  const { indicatorId, goalId, strength } = await req.json();
+  await prisma.strategyMapIndicatorLink.updateMany({ where: { boardId, indicatorId, goalId }, data: { strength } });
+  return NextResponse.json({ ok: true });
+}
+
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id: boardId } = await params;
   const { indicatorId, goalId } = await req.json();

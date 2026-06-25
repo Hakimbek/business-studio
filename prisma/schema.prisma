@@ -112,6 +112,7 @@ model StrategyMapIndicatorLink {
   board       StrategyMapBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
   indicatorId String
   goalId      String
+  strength    Int              @default(2)
   createdAt   DateTime         @default(now())
 
   @@unique([boardId, indicatorId, goalId])
@@ -123,6 +124,7 @@ model StrategyMapLink {
   board        StrategyMapBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
   sourceGoalId String
   targetGoalId String
+  strength     Int              @default(2)
   createdAt    DateTime         @default(now())
 
   @@unique([boardId, sourceGoalId, targetGoalId])
