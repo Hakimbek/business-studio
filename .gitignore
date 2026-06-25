@@ -52,5 +52,4 @@ prisma/dev.db-wal
 prisma/migrations/
 
 # Claude Code local files
-.claude/settings.local.json
-.claude/worktrees/
+.claude/*
