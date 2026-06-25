@@ -1,0 +1,323 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Notation {
+  IDEF0
+  BPMN
+  EPC
+  PROCEDURE
+}
+
+enum RaciType {
+  RESPONSIBLE
+  ACCOUNTABLE
+  CONSULTED
+  INFORMED
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum OrgUnitType {
+  COMPANY
+  DIVISION
+  DEPARTMENT
+  GROUP
+}
+
+model Company {
+  id               String      @id @default(cuid())
+  name             String      @unique
+  mission          String?
+  vision           String?
+  values           String?
+  strategicHorizon String?
+
+  strategies        Strategy[]
+  goals             Goal[]
+  processes         Process[]
+  orgUnits          OrgUnit[]
+  indicators        Indicator[]
+  risks             Risk[]
+  positions         Position[]
+  strategyMapBoards StrategyMapBoard[]
+  projects          Project[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Strategy {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  color       String   @default("#2563eb")
+
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  goals     Goal[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Goal {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  weight      Float?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  ownerId String?
+  owner   Position? @relation("GoalOwner", fields: [ownerId], references: [id])
+
+  strategyId String?
+  strategy   Strategy? @relation(fields: [strategyId], references: [id], onDelete: SetNull)
+
+  indicators Indicator[]
+  mapEntries StrategyMapEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StrategyMapBoard {
+  id               String                     @id @default(cuid())
+  name             String
+  companyId        String
+  company          Company                    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entries          StrategyMapEntry[]
+  links            StrategyMapLink[]
+  regions          StrategyMapRegion[]
+  indicatorEntries StrategyMapIndicatorEntry[]
+  indicatorLinks   StrategyMapIndicatorLink[]
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+}
+
+model StrategyMapIndicatorLink {
+  id          String           @id @default(cuid())
+  boardId     String
+  board       StrategyMapBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  indicatorId String
+  goalId      String
+  createdAt   DateTime         @default(now())
+
+  @@unique([boardId, indicatorId, goalId])
+}
+
+model StrategyMapLink {
+  id           String           @id @default(cuid())
+  boardId      String
+  board        StrategyMapBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  sourceGoalId String
+  targetGoalId String
+  createdAt    DateTime         @default(now())
+
+  @@unique([boardId, sourceGoalId, targetGoalId])
+}
+
+model StrategyMapEntry {
+  id        String           @id @default(cuid())
+  x         Float            @default(100)
+  y         Float            @default(100)
+  boardId   String
+  board     StrategyMapBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  goalId    String
+  goal      Goal             @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@unique([boardId, goalId])
+}
+
+model StrategyMapRegion {
+  id        String           @id @default(cuid())
+  label     String
+  color     String           @default("#6366f1")
+  x         Float            @default(50)
+  y         Float            @default(50)
+  width     Float            @default(280)
+  height    Float            @default(200)
+  boardId   String
+  board     StrategyMapBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+}
+
+model StrategyMapIndicatorEntry {
+  id          String           @id @default(cuid())
+  x           Float            @default(100)
+  y           Float            @default(100)
+  boardId     String
+  board       StrategyMapBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  indicatorId String
+  indicator   Indicator        @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+
+  @@unique([boardId, indicatorId])
+}
+
+model Indicator {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  unit        String?
+  targetValue Float?
+  actualValue Float?
+  frequency   String?
+  deadline    DateTime?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  goalId    String?
+  goal      Goal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+
+  processId String?
+  process   Process? @relation(fields: [processId], references: [id], onDelete: SetNull)
+
+  ownerId String?
+  owner   Position? @relation("IndicatorOwner", fields: [ownerId], references: [id])
+
+  values     IndicatorValue[]
+  mapEntries StrategyMapIndicatorEntry[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model IndicatorValue {
+  id     String @id @default(cuid())
+  period String
+  value  Float
+  note   String?
+
+  indicatorId String
+  indicator   Indicator @relation(fields: [indicatorId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([indicatorId, period])
+}
+
+model Process {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  notation    Notation @default(PROCEDURE)
+  code        String?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  parentId String?
+  parent   Process?  @relation("ProcessTree", fields: [parentId], references: [id])
+  children Process[] @relation("ProcessTree")
+
+  ownerRoleId String?
+  ownerRole   Position? @relation("ProcessOwner", fields: [ownerRoleId], references: [id])
+
+  indicators Indicator[]
+  risks      Risk[]
+  raciItems  RaciItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OrgUnit {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  type        OrgUnitType @default(DEPARTMENT)
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  parentId String?
+  parent   OrgUnit?  @relation("OrgTree", fields: [parentId], references: [id])
+  children OrgUnit[] @relation("OrgTree")
+
+  positions Position[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Position {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  orgUnitId String?
+  orgUnit   OrgUnit? @relation(fields: [orgUnitId], references: [id], onDelete: SetNull)
+
+  goalsOwned       Goal[]      @relation("GoalOwner")
+  processesOwned   Process[]   @relation("ProcessOwner")
+  indicatorsOwned  Indicator[] @relation("IndicatorOwner")
+  projectsOwned    Project[]   @relation("ProjectOwner")
+  raciItems        RaciItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model RaciItem {
+  id       String   @id @default(cuid())
+  raciType RaciType
+
+  processId  String
+  process    Process  @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  positionId String
+  position   Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  @@unique([processId, positionId, raciType])
+}
+
+model Risk {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  probability Int?
+  impact      Int?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  processId String?
+  process   Process? @relation(fields: [processId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  status      ProjectStatus @default(ACTIVE)
+  deadline    DateTime?
+
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  ownerId String?
+  owner   Position? @relation("ProjectOwner", fields: [ownerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
