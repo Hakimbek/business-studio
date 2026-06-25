@@ -4,7 +4,7 @@ import {
   forwardRef, useEffect, useLayoutEffect, useRef, useState,
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Eye, PenLine, Plus, Pencil, Trash2, X, Map as MapIcon } from "lucide-react";
+import { Eye, Link2, PenLine, Plus, Pencil, Trash2, X, Map as MapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -129,7 +129,8 @@ function LinksOverlay({
       if (prev.length === next.length &&
         prev.every((a, i) => a.id === next[i].id &&
           a.x1 === next[i].x1 && a.y1 === next[i].y1 &&
-          a.x2 === next[i].x2 && a.y2 === next[i].y2)) return prev;
+          a.x2 === next[i].x2 && a.y2 === next[i].y2 &&
+          a.strength === next[i].strength)) return prev;
       return next;
     });
   });
@@ -165,7 +166,7 @@ function LinksOverlay({
             )}
             {!isH && <path d={d} stroke={color} strokeWidth={sw + 1} fill="none" opacity={0.2} filter="url(#glow)" style={{ pointerEvents: "none" }} />}
             <path d={d} stroke={isH ? "#ef4444" : color} strokeWidth={isH ? sw + 0.5 : sw} fill="none"
-              markerEnd={`url(#${markerId})`} className={isH ? undefined : "arrow-flow"}
+              className={isH ? undefined : "arrow-flow"}
               style={{ pointerEvents: "none", transition: "stroke 0.15s" }} />
             {isH && (
               <g transform={`translate(${mx},${my})`}
@@ -714,21 +715,27 @@ function BoardView({ board, allGoals, allIndicators }: {
       <div className="flex flex-col flex-1 overflow-hidden">
         {/* Toolbar */}
         <div className="flex items-center gap-3 px-4 py-2 border-b border-gray-100 bg-white shrink-0">
-          {/* Connect button — edit mode only */}
+          {/* Connect mode toggle — edit mode only */}
           {!viewMode && (
             <>
-              <button onClick={toggleConnectMode}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer",
-                  connectMode ? "bg-indigo-600 text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                )}>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                  <circle cx="2" cy="6" r="1.5" fill="currentColor"/>
-                  <circle cx="10" cy="6" r="1.5" fill="currentColor"/>
-                  <line x1="3.5" y1="6" x2="8.5" y2="6" stroke="currentColor" strokeWidth="1.5"/>
-                </svg>
-                {connectMode ? "Отмена связи" : "Связать"}
-              </button>
+              <div className="flex items-center gap-0.5 bg-gray-100 p-0.5 rounded-full">
+                <button
+                  onClick={() => { setConnectMode(false); setConnecting(null); }}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer",
+                    !connectMode ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  )}>
+                  <Link2 size={11} /> Режим связи выкл
+                </button>
+                <button
+                  onClick={() => setConnectMode(true)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer",
+                    connectMode ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  )}>
+                  <Link2 size={11} /> Режим связи вкл
+                </button>
+              </div>
               {connectMode && (
                 <span className="text-xs text-gray-400">
                   {connecting
