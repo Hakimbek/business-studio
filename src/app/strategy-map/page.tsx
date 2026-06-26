@@ -1,17 +1,18 @@
 "use client";
 
 import {
-  forwardRef, useEffect, useLayoutEffect, useRef, useState,
+  forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Eye, Link2, PenLine, Plus, Pencil, Trash2, X, Map as MapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AddButton } from "@/components/shared/AddButton";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { cn } from "@/lib/utils";
+import { cn, periodLabel } from "@/lib/utils";
 import type {
   Goal, Indicator, StrategyMapBoard, StrategyMapEntry,
   StrategyMapIndicatorEntry, StrategyMapRegion, StrategyMapIndicatorLink,
@@ -21,8 +22,10 @@ import type {
 
 type RagStatus = "green" | "yellow" | "red" | null;
 
-function indicatorStatus(ind: Indicator): RagStatus {
-  const actual = ind.values?.[0]?.value ?? ind.actualValue;
+function indicatorStatus(ind: Indicator, period?: string | null): RagStatus {
+  const actual = period
+    ? (ind.values?.find(v => v.period === period)?.value ?? null)
+    : (ind.values?.[0]?.value ?? ind.actualValue);
   if (actual == null || ind.targetValue == null || ind.targetValue === 0) return null;
   const ratio = actual / ind.targetValue;
   if (ratio >= 0.8) return "green";
@@ -34,11 +37,12 @@ function goalStatus(
   goalId: string,
   indicatorLinks: StrategyMapIndicatorLink[],
   indicatorEntries: StrategyMapIndicatorEntry[],
+  period?: string | null,
 ): RagStatus {
   const linkedIds = new Set(indicatorLinks.filter(l => l.goalId === goalId).map(l => l.indicatorId));
   const statuses = indicatorEntries
     .filter(ie => linkedIds.has(ie.indicatorId))
-    .map(ie => indicatorStatus(ie.indicator))
+    .map(ie => indicatorStatus(ie.indicator, period))
     .filter((s): s is NonNullable<RagStatus> => s !== null);
   if (statuses.length === 0) return null;
   if (statuses.includes("red"))    return "red";
@@ -284,7 +288,7 @@ const RegionBox = forwardRef<HTMLDivElement, {
 const GOAL_D = 140;
 
 function GoalCard({
-  entry, pos, status, connectMode, isSource, viewMode, cardRef, onMouseDown, onRemove, onConnect, onPortConnect,
+  entry, pos, status, connectMode, isSource, viewMode, selectedPeriod, cardRef, onMouseDown, onRemove, onConnect, onPortConnect,
 }: {
   entry: StrategyMapEntry;
   pos: { x: number; y: number };
@@ -292,6 +296,7 @@ function GoalCard({
   connectMode: boolean;
   isSource: boolean;
   viewMode: boolean;
+  selectedPeriod: string | null;
   cardRef: (el: HTMLElement | null) => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onRemove: () => void;
@@ -365,13 +370,14 @@ function GoalCard({
 // ── Indicator card ────────────────────────────────────────────────────────────
 
 function IndicatorCard({
-  entry, pos, connectMode, isSource, viewMode, cardRef, onMouseDown, onRemove, onConnect, onPortConnect,
+  entry, pos, connectMode, isSource, viewMode, selectedPeriod, cardRef, onMouseDown, onRemove, onConnect, onPortConnect,
 }: {
   entry: StrategyMapIndicatorEntry;
   pos: { x: number; y: number };
   connectMode: boolean;
   isSource: boolean;
   viewMode: boolean;
+  selectedPeriod: string | null;
   cardRef: (el: HTMLElement | null) => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onRemove: () => void;
@@ -379,12 +385,14 @@ function IndicatorCard({
   onPortConnect: () => void;
 }) {
   const ind = entry.indicator;
-  const status = indicatorStatus(ind);
+  const status = indicatorStatus(ind, selectedPeriod);
   const rag = status ? RAG[status] : null;
   const borderColor = rag?.border ?? "#0891b2";
   const bgColor     = rag?.bg ?? "#ffffff";
 
-  const actual = ind.values?.[0]?.value ?? ind.actualValue;
+  const actual = selectedPeriod
+    ? (ind.values?.find(v => v.period === selectedPeriod)?.value ?? null)
+    : (ind.values?.[0]?.value ?? ind.actualValue);
   const pct = (actual != null && ind.targetValue) ? Math.round((actual / ind.targetValue) * 100) : null;
 
   return (
@@ -516,6 +524,13 @@ function BoardView({ board, allGoals, allIndicators }: {
   const [connectMode, setConnectMode] = useState(false);
   const [connecting, setConnecting] = useState<ConnectSource | null>(null);
   const [addRegionOpen, setAddRegionOpen] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
+
+  const allPeriods = useMemo(() => {
+    const seen = new Set<string>();
+    board.indicatorEntries.forEach(ie => ie.indicator.values?.forEach(v => seen.add(v.period)));
+    return [...seen].sort().reverse();
+  }, [board.indicatorEntries]);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
@@ -746,8 +761,23 @@ function BoardView({ board, allGoals, allIndicators }: {
             </>
           )}
 
+          {/* Period selector */}
+          {allPeriods.length > 0 && (
+            <Select value={selectedPeriod ?? ""} onValueChange={v => setSelectedPeriod(v || null)}>
+              <SelectTrigger className="h-7 text-xs w-44 ml-auto">
+                <SelectValue placeholder="Последний период" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Последний период</SelectItem>
+                {allPeriods.map(p => (
+                  <SelectItem key={p} value={p}>{periodLabel(p)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
           {/* Mode segmented toggle */}
-          <div className="ml-auto flex items-center gap-0.5 bg-gray-100 p-0.5 rounded-full">
+          <div className={cn("flex items-center gap-0.5 bg-gray-100 p-0.5 rounded-full", allPeriods.length === 0 && "ml-auto")}>
             <button
               onClick={enterEditMode}
               className={cn(
@@ -811,8 +841,8 @@ function BoardView({ board, allGoals, allIndicators }: {
               const lp  = localPos[entry.goalId];
               const pos = { x: lp?.x ?? entry.x, y: lp?.y ?? entry.y };
               return (
-                <GoalCard key={entry.id} entry={entry} pos={pos} viewMode={viewMode}
-                  status={goalStatus(entry.goalId, board.indicatorLinks, board.indicatorEntries)}
+                <GoalCard key={entry.id} entry={entry} pos={pos} viewMode={viewMode} selectedPeriod={selectedPeriod}
+                  status={goalStatus(entry.goalId, board.indicatorLinks, board.indicatorEntries, selectedPeriod)}
                   connectMode={connectMode}
                   isSource={connecting?.id === entry.goalId && connecting?.kind === "goal"}
                   cardRef={(el) => { if (el) cardRefs.current.set(entry.goalId, el); else cardRefs.current.delete(entry.goalId); }}
@@ -830,7 +860,7 @@ function BoardView({ board, allGoals, allIndicators }: {
               const lp  = localPos[`ind-${ie.indicatorId}`];
               const pos = { x: lp?.x ?? ie.x, y: lp?.y ?? ie.y };
               return (
-                <IndicatorCard key={ie.id} entry={ie} pos={pos} viewMode={viewMode}
+                <IndicatorCard key={ie.id} entry={ie} pos={pos} viewMode={viewMode} selectedPeriod={selectedPeriod}
                   connectMode={connectMode}
                   isSource={connecting?.id === ie.indicatorId && connecting?.kind === "indicator"}
                   cardRef={(el) => { if (el) cardRefs.current.set(`ind-${ie.indicatorId}`, el); else cardRefs.current.delete(`ind-${ie.indicatorId}`); }}

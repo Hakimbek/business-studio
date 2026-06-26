@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
       indicatorEntries: {
         include: {
           indicator: {
-            include: { values: { orderBy: { period: "desc" }, take: 1 } },
+            include: { values: { orderBy: { period: "desc" } } },
           },
         },
         orderBy: { createdAt: "asc" },
