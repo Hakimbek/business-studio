@@ -4,7 +4,7 @@ import {
   forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp, Eye, Link2, PenLine, Plus, Pencil, Trash2, X, Map as MapIcon } from "lucide-react";
+import { ChevronRight, Eye, Link2, PenLine, Plus, Pencil, Trash2, X, Map as MapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -305,8 +305,7 @@ const RegionBox = forwardRef<HTMLDivElement, {
 // ── Goal card ─────────────────────────────────────────────────────────────────
 
 function GoalCard({
-  entry, pos, status, connectMode, isSource, viewMode, selectedPeriod, collapsed, cardRef,
-  onMouseDown, onRemove, onConnect, onPortConnect, onToggleCollapse,
+  entry, pos, status, connectMode, isSource, viewMode, selectedPeriod, cardRef, onMouseDown, onRemove, onConnect, onPortConnect,
 }: {
   entry: StrategyMapEntry;
   pos: { x: number; y: number };
@@ -315,36 +314,33 @@ function GoalCard({
   isSource: boolean;
   viewMode: boolean;
   selectedPeriod: string | null;
-  collapsed: boolean;
   cardRef: (el: HTMLElement | null) => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onRemove: () => void;
   onConnect: () => void;
   onPortConnect: () => void;
-  onToggleCollapse: () => void;
 }) {
   const goal = entry.goal;
   const rag = status ? RAG[status] : null;
   const borderColor = rag?.border ?? "#6366f1";
   const bgColor     = rag?.bg ?? "#ffffff";
-  const d = collapsed ? GOAL_D_COL : GOAL_D_EXP;
 
   return (
     <div
       ref={cardRef}
       className={cn(
-        "absolute group rounded-full border-4 shadow-md select-none overflow-visible transition-all",
+        "absolute group rounded-full border-4 shadow-md select-none overflow-visible transition-shadow",
         "flex flex-col items-center justify-center text-center",
         viewMode ? "cursor-default hover:shadow-lg" : connectMode ? "cursor-pointer hover:shadow-lg" : "cursor-move hover:shadow-lg",
         isSource && "ring-4 ring-offset-2 ring-pulse",
       )}
-      style={{ transform: `translate(${pos.x}px, ${pos.y}px)`, width: d, height: d, zIndex: 10, borderColor, background: bgColor, "--tw-ring-color": borderColor } as React.CSSProperties}
+      style={{ transform: `translate(${pos.x}px, ${pos.y}px)`, width: GOAL_D_EXP, height: GOAL_D_EXP, zIndex: 10, borderColor, background: bgColor, "--tw-ring-color": borderColor } as React.CSSProperties}
       onMouseDown={viewMode ? undefined : connectMode ? undefined : onMouseDown}
       onClick={!viewMode && connectMode ? onConnect : undefined}
     >
-      <div className="px-2 w-full">
-        <p className={cn("font-semibold text-gray-800 leading-tight", collapsed ? "text-[10px] line-clamp-1" : "text-[11px] line-clamp-3")}>{goal.name}</p>
-        {!collapsed && rag && (
+      <div className="px-3 w-full">
+        <p className="text-[11px] font-semibold text-gray-800 leading-tight line-clamp-3">{goal.name}</p>
+        {rag && (
           <div className="mt-1.5 flex justify-center">
             <span className="w-2 h-2 rounded-full inline-block" style={{ background: borderColor }} />
           </div>
@@ -364,14 +360,6 @@ function GoalCard({
         <button className="absolute -top-2 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow"
           onClick={(e) => { e.stopPropagation(); onRemove(); }}><X size={10} /></button>
       )}
-
-      {!viewMode && (
-        <button className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}>
-          {collapsed ? <ChevronDown size={9} /> : <ChevronUp size={9} />}
-        </button>
-      )}
     </div>
   );
 }
@@ -379,8 +367,7 @@ function GoalCard({
 // ── Indicator card ────────────────────────────────────────────────────────────
 
 function IndicatorCard({
-  entry, pos, connectMode, isSource, viewMode, selectedPeriod, collapsed, cardRef,
-  onMouseDown, onRemove, onConnect, onPortConnect, onToggleCollapse,
+  entry, pos, connectMode, isSource, viewMode, selectedPeriod, cardRef, onMouseDown, onRemove, onConnect, onPortConnect,
 }: {
   entry: StrategyMapIndicatorEntry;
   pos: { x: number; y: number };
@@ -388,13 +375,11 @@ function IndicatorCard({
   isSource: boolean;
   viewMode: boolean;
   selectedPeriod: string | null;
-  collapsed: boolean;
   cardRef: (el: HTMLElement | null) => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onRemove: () => void;
   onConnect: () => void;
   onPortConnect: () => void;
-  onToggleCollapse: () => void;
 }) {
   const ind = entry.indicator;
   const status = indicatorStatus(ind, selectedPeriod);
@@ -423,25 +408,18 @@ function IndicatorCard({
       onMouseDown={viewMode ? undefined : connectMode ? undefined : onMouseDown}
       onClick={!viewMode && connectMode ? onConnect : undefined}
     >
-      <div className="p-3 pb-2">
+      <div className="p-3">
         <p className="text-xs font-semibold text-gray-800 leading-snug">{ind.name}</p>
-        {!collapsed && (
-          <>
-            <div className="mt-1.5 flex items-center gap-2">
-              {ind.targetValue != null && (
-                <p className="text-[10px] text-gray-500">Цель: <strong className="text-gray-700">{ind.targetValue}{ind.unit ? ` ${ind.unit}` : ""}</strong></p>
-              )}
-              {pct != null && <span className={cn("text-[10px] font-bold ml-auto", rag?.badge ?? "text-gray-400")}>{pct}%</span>}
-            </div>
-            {pct != null && (
-              <div className="mt-1.5 h-1 rounded-full bg-gray-200 overflow-hidden">
-                <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: borderColor }} />
-              </div>
-            )}
-          </>
-        )}
-        {collapsed && pct != null && (
-          <span className={cn("text-[10px] font-bold", rag?.badge ?? "text-gray-400")}>{pct}%</span>
+        <div className="mt-1.5 flex items-center gap-2">
+          {ind.targetValue != null && (
+            <p className="text-[10px] text-gray-500">Цель: <strong className="text-gray-700">{ind.targetValue}{ind.unit ? ` ${ind.unit}` : ""}</strong></p>
+          )}
+          {pct != null && <span className={cn("text-[10px] font-bold ml-auto", rag?.badge ?? "text-gray-400")}>{pct}%</span>}
+        </div>
+        {pct != null && (
+          <div className="mt-1.5 h-1 rounded-full bg-gray-200 overflow-hidden">
+            <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: borderColor }} />
+          </div>
         )}
       </div>
 
@@ -458,14 +436,6 @@ function IndicatorCard({
         <button className="absolute top-1 right-1 w-5 h-5 rounded-full bg-white/90 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow-sm"
           onClick={(e) => { e.stopPropagation(); onRemove(); }}><X size={10} /></button>
       )}
-
-      {!viewMode && (
-        <button className="absolute bottom-0.5 left-1 w-4 h-4 rounded text-gray-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}>
-          {collapsed ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
-        </button>
-      )}
     </div>
   );
 }
@@ -480,25 +450,22 @@ const PROJECT_STATUS_COLOR: Record<string, string> = {
 };
 
 function ProjectCard({
-  entry, pos, connectMode, isSource, viewMode, collapsed, cardRef,
-  onMouseDown, onRemove, onConnect, onPortConnect, onToggleCollapse,
+  entry, pos, connectMode, isSource, viewMode, cardRef, onMouseDown, onRemove, onConnect, onPortConnect,
 }: {
   entry: StrategyMapProjectEntry;
   pos: { x: number; y: number };
   connectMode: boolean;
   isSource: boolean;
   viewMode: boolean;
-  collapsed: boolean;
   cardRef: (el: HTMLElement | null) => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onRemove: () => void;
   onConnect: () => void;
   onPortConnect: () => void;
-  onToggleCollapse: () => void;
 }) {
   const proj = entry.project;
   const statusColor = PROJECT_STATUS_COLOR[proj.status] ?? "#ea580c";
-  const D = collapsed ? PROJ_D_COL : PROJ_D_EXP;
+  const D = PROJ_D_EXP;
   const inner = Math.round(D / Math.SQRT2);
   const offset = Math.round((D - inner) / 2);
 
@@ -520,18 +487,14 @@ function ProjectCard({
 
       {/* Content — not rotated */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-2 text-center">
-        <p className={cn("font-semibold text-gray-800 leading-tight", collapsed ? "text-[9px] line-clamp-1" : "text-[10px] line-clamp-2")}>{proj.name}</p>
-        {!collapsed && (
-          <>
-            <span className="text-[9px] font-medium mt-1" style={{ color: statusColor }}>
-              {PROJECT_STATUS_LABEL[proj.status] ?? proj.status}
-            </span>
-            {proj.deadline && (
-              <p className="text-[9px] text-gray-400 mt-0.5">
-                до {new Date(proj.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
-              </p>
-            )}
-          </>
+        <p className="text-[10px] font-semibold text-gray-800 leading-tight line-clamp-2">{proj.name}</p>
+        <span className="text-[9px] font-medium mt-1" style={{ color: statusColor }}>
+          {PROJECT_STATUS_LABEL[proj.status] ?? proj.status}
+        </span>
+        {proj.deadline && (
+          <p className="text-[9px] text-gray-400 mt-0.5">
+            до {new Date(proj.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
+          </p>
         )}
       </div>
 
@@ -552,14 +515,6 @@ function ProjectCard({
           onClick={(e) => { e.stopPropagation(); onRemove(); }}><X size={10} /></button>
       )}
 
-      {/* Collapse toggle — bottom tip */}
-      {!viewMode && (
-        <button className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-5 h-5 rounded-full bg-white text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow"
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}>
-          {collapsed ? <ChevronDown size={9} /> : <ChevronUp size={9} />}
-        </button>
-      )}
     </div>
   );
 }
@@ -632,15 +587,7 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
   const [connecting, setConnecting] = useState<ConnectSource | null>(null);
   const [addRegionOpen, setAddRegionOpen] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
-  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
-
-  function toggleCollapse(id: string) {
-    setCollapsedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }
+  const [panelCollapsed, setPanelCollapsed] = useState<Record<string, boolean>>({});
 
   const allPeriods = useMemo(() => {
     const seen = new Set<string>();
@@ -819,59 +766,48 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
       {/* Side panel — edit mode only */}
       {!viewMode && (
         <div className="w-56 shrink-0 border-r border-gray-100 bg-gray-50 flex flex-col overflow-y-auto">
-          <div className="p-3 space-y-4">
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                Цели {poolGoals.length > 0 && `(${poolGoals.length})`}
-              </p>
-              {poolGoals.length === 0
-                ? <p className="text-[11px] text-gray-400 italic">Все цели на карте</p>
-                : <div className="space-y-1">{poolGoals.map(g => (
-                    <div key={g.id} draggable
-                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("kind", "goal"); e.dataTransfer.setData("id", g.id); }}
-                      className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 cursor-move hover:border-indigo-400 hover:text-indigo-700 hover:shadow-sm transition-all select-none">
-                      {g.name}
-                    </div>
-                  ))}</div>
-              }
-            </div>
+          <div className="p-3 space-y-1">
 
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                Показатели {poolInds.length > 0 && `(${poolInds.length})`}
-              </p>
-              {poolInds.length === 0
-                ? <p className="text-[11px] text-gray-400 italic">Все показатели на карте</p>
-                : <div className="space-y-1">{poolInds.map(ind => (
-                    <div key={ind.id} draggable
-                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("kind", "indicator"); e.dataTransfer.setData("id", ind.id); }}
-                      className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 cursor-move hover:border-cyan-400 hover:text-cyan-700 hover:shadow-sm transition-all select-none">
-                      {ind.name}
-                    </div>
-                  ))}</div>
-              }
-            </div>
+            {/* Goals section */}
+            {[
+              { key: "goals", label: "Цели", pool: poolGoals, hoverCls: "hover:border-indigo-400 hover:text-indigo-700", kind: "goal" as const },
+              { key: "inds",  label: "Показатели", pool: poolInds, hoverCls: "hover:border-cyan-400 hover:text-cyan-700",   kind: "indicator" as const },
+              { key: "projs", label: "Проекты", pool: poolProjs, hoverCls: "hover:border-orange-400 hover:text-orange-700", kind: "project" as const },
+            ].map(({ key, label, pool, hoverCls, kind }) => (
+              <div key={key} className="rounded-lg overflow-hidden border border-gray-100">
+                <button
+                  onClick={() => setPanelCollapsed(p => ({ ...p, [key]: !p[key] }))}
+                  className="w-full flex items-center gap-1.5 px-2.5 py-2 bg-gray-100 hover:bg-gray-200 transition-colors cursor-pointer"
+                >
+                  <ChevronRight size={12} className={cn("text-gray-400 transition-transform shrink-0", !panelCollapsed[key] && "rotate-90")} />
+                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide flex-1 text-left">{label}</span>
+                  {pool.length > 0 && (
+                    <span className="text-[10px] font-medium text-gray-400 bg-white rounded-full px-1.5 py-0.5 leading-none">{pool.length}</span>
+                  )}
+                </button>
+                {!panelCollapsed[key] && (
+                  <div className="p-1.5 space-y-1">
+                    {pool.length === 0
+                      ? <p className="text-[11px] text-gray-400 italic px-1 py-0.5">Все на карте</p>
+                      : pool.map(item => (
+                          <div key={item.id} draggable
+                            onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("kind", kind); e.dataTransfer.setData("id", item.id); }}
+                            className={cn("bg-white border border-gray-200 rounded-md px-2 py-1.5 text-xs font-medium text-gray-700 cursor-move hover:shadow-sm transition-all select-none", hoverCls)}>
+                            {item.name}
+                          </div>
+                        ))
+                    }
+                  </div>
+                )}
+              </div>
+            ))}
 
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                Проекты {poolProjs.length > 0 && `(${poolProjs.length})`}
-              </p>
-              {poolProjs.length === 0
-                ? <p className="text-[11px] text-gray-400 italic">Все проекты на карте</p>
-                : <div className="space-y-1">{poolProjs.map(proj => (
-                    <div key={proj.id} draggable
-                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("kind", "project"); e.dataTransfer.setData("id", proj.id); }}
-                      className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 cursor-move hover:border-orange-400 hover:text-orange-700 hover:shadow-sm transition-all select-none">
-                      {proj.name}
-                    </div>
-                  ))}</div>
-              }
+            <div className="pt-1">
+              <button onClick={() => setAddRegionOpen(true)}
+                className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg border-2 border-dashed border-gray-300 text-xs font-medium text-gray-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors cursor-pointer">
+                <Plus size={12} /> Добавить перспективу
+              </button>
             </div>
-
-            <button onClick={() => setAddRegionOpen(true)}
-              className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg border-2 border-dashed border-gray-300 text-xs font-medium text-gray-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors cursor-pointer">
-              <Plus size={12} /> Добавить перспективу
-            </button>
           </div>
         </div>
       )}
@@ -995,15 +931,13 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
                   status={goalStatus(entry.goalId, board.indicatorLinks, board.indicatorEntries, selectedPeriod)}
                   connectMode={connectMode}
                   isSource={connecting?.id === entry.goalId && connecting?.kind === "goal"}
-                  collapsed={collapsedIds.has(entry.goalId)}
                   cardRef={(el) => { if (el) cardRefs.current.set(entry.goalId, el); else cardRefs.current.delete(entry.goalId); }}
                   onMouseDown={(e) => startDrag(e,
                     { kind: "goal", id: entry.goalId, startCX: e.clientX, startCY: e.clientY, startEX: pos.x, startEY: pos.y },
                     cardRefs.current.get(entry.goalId) ?? null)}
                   onRemove={() => removeGoalMut.mutate(entry.goalId)}
                   onConnect={() => handleConnect("goal", entry.goalId)}
-                  onPortConnect={() => handlePortConnect("goal", entry.goalId)}
-                  onToggleCollapse={() => toggleCollapse(entry.goalId)} />
+                  onPortConnect={() => handlePortConnect("goal", entry.goalId)} />
               );
             })}
 
@@ -1015,15 +949,13 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
                 <IndicatorCard key={ie.id} entry={ie} pos={pos} viewMode={viewMode} selectedPeriod={selectedPeriod}
                   connectMode={connectMode}
                   isSource={connecting?.id === ie.indicatorId && connecting?.kind === "indicator"}
-                  collapsed={collapsedIds.has(`ind-${ie.indicatorId}`)}
                   cardRef={(el) => { if (el) cardRefs.current.set(`ind-${ie.indicatorId}`, el); else cardRefs.current.delete(`ind-${ie.indicatorId}`); }}
                   onMouseDown={(e) => startDrag(e,
                     { kind: "indicator", id: ie.indicatorId, startCX: e.clientX, startCY: e.clientY, startEX: pos.x, startEY: pos.y },
                     cardRefs.current.get(`ind-${ie.indicatorId}`) ?? null)}
                   onRemove={() => removeIndMut.mutate(ie.indicatorId)}
                   onConnect={() => handleConnect("indicator", ie.indicatorId)}
-                  onPortConnect={() => handlePortConnect("indicator", ie.indicatorId)}
-                  onToggleCollapse={() => toggleCollapse(`ind-${ie.indicatorId}`)} />
+                  onPortConnect={() => handlePortConnect("indicator", ie.indicatorId)} />
               );
             })}
 
@@ -1035,15 +967,13 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
                 <ProjectCard key={pe.id} entry={pe} pos={pos} viewMode={viewMode}
                   connectMode={connectMode}
                   isSource={connecting?.id === pe.projectId && connecting?.kind === "project"}
-                  collapsed={collapsedIds.has(`proj-${pe.projectId}`)}
                   cardRef={(el) => { if (el) cardRefs.current.set(`proj-${pe.projectId}`, el); else cardRefs.current.delete(`proj-${pe.projectId}`); }}
                   onMouseDown={(e) => startDrag(e,
                     { kind: "project", id: pe.projectId, startCX: e.clientX, startCY: e.clientY, startEX: pos.x, startEY: pos.y },
                     cardRefs.current.get(`proj-${pe.projectId}`) ?? null)}
                   onRemove={() => removeProjMut.mutate(pe.projectId)}
                   onConnect={() => handleConnect("project", pe.projectId)}
-                  onPortConnect={() => handlePortConnect("project", pe.projectId)}
-                  onToggleCollapse={() => toggleCollapse(`proj-${pe.projectId}`)} />
+                  onPortConnect={() => handlePortConnect("project", pe.projectId)} />
               );
             })}
 
