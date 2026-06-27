@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Pencil, PlusCircle, Trash2, X, Search, ArrowUp, ArrowDown } from "lucide-react";
+import { Pencil, PlusCircle, Trash2, X, Search, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddButton } from "@/components/shared/AddButton";
 import { Badge } from "@/components/ui/badge";
@@ -163,13 +163,9 @@ export default function IndicatorsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<Indicator | null>(null);
   const [form, setForm] = useState<FormState>(empty);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [addValueFor, setAddValueFor] = useState<Indicator | null>(null);
-  const [modalPeriod, setModalPeriod] = useState(currentPeriod());
-  const [modalValue, setModalValue] = useState("");
-  const [modalNote, setModalNote] = useState("");
+  const [detailIndicator, setDetailIndicator] = useState<Indicator | null>(null);
 
   const { data: indicators = [], isLoading } = useQuery<Indicator[]>({
     queryKey: ["indicators"],
@@ -198,18 +194,6 @@ export default function IndicatorsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["indicators"] }); setDeleteId(null); },
   });
 
-  const addValueMutation = useMutation({
-    mutationFn: (d: { indicatorId: string; period: string; value: number; note: string }) =>
-      fetch("/api/indicator-values", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(d) }).then((r) => r.json()),
-    onSuccess: () => {
-      if (addValueFor) {
-        qc.invalidateQueries({ queryKey: ["indicator-values", addValueFor.id] });
-        qc.invalidateQueries({ queryKey: ["indicators"] });
-      }
-      setAddValueFor(null);
-      setModalValue(""); setModalNote("");
-    },
-  });
 
   function openCreate() { setEditItem(null); setForm(empty); setDialogOpen(true); }
   function openEdit(item: Indicator) {
@@ -280,7 +264,7 @@ export default function IndicatorsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50">
-                  <th className="w-8" />
+                  <th className="text-center px-3 py-2.5 text-xs font-semibold text-gray-400 w-10">#</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Название</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Цель (зн.)</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Факт</th>
@@ -296,8 +280,7 @@ export default function IndicatorsPage() {
                     <td colSpan={8} className="px-3 py-6 text-sm text-center text-gray-400">Ничего не найдено</td>
                   </tr>
                 )}
-                {visibleIndicators.map((ind) => {
-                  const isExpanded = expandedId === ind.id;
+                {visibleIndicators.map((ind, idx) => {
                   const pct = ind.targetValue && ind.actualValue != null
                     ? Math.round((ind.actualValue / ind.targetValue) * 100)
                     : null;
@@ -307,63 +290,42 @@ export default function IndicatorsPage() {
                     : "text-red-500";
 
                   return (
-                    <>
-                      <tr key={ind.id}
-                        className={cn("hover:bg-gray-50 transition-colors", isExpanded && "bg-blue-50 hover:bg-blue-50")}>
-                        <td className="pl-3">
-                          <button
-                            onClick={() => setExpandedId(isExpanded ? null : ind.id)}
-                            className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-blue-600 transition-all cursor-pointer">
-                            <ChevronRight size={14} className={cn("transition-transform", isExpanded && "rotate-90 text-blue-600")} />
-                          </button>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="font-medium text-gray-900 text-sm">{ind.name}</div>
-                          {ind.goal && <div className="text-[11px] text-gray-400 mt-0.5">{ind.goal.name}</div>}
-                        </td>
-                        <td className="px-3 py-2.5 text-sm text-gray-700">
-                          {ind.targetValue != null
-                            ? <>{ind.targetValue}{ind.unit && <span className="text-gray-400 ml-1">{ind.unit}</span>}</>
-                            : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-2.5 text-sm text-gray-700">
-                          {ind.actualValue != null
-                            ? <>{ind.actualValue}{ind.unit && <span className="text-gray-400 ml-1">{ind.unit}</span>}</>
-                            : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className={cn("px-3 py-2.5 text-sm font-semibold", pctColor)}>
-                          {pct != null ? `${pct}%` : <span className="text-gray-300 font-normal">—</span>}
-                        </td>
-                        <td className="px-3 py-2.5 text-sm text-gray-600">
-                          {ind.owner?.name ?? <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-2.5 text-sm text-gray-600">
-                          {ind.deadline
-                            ? new Date(ind.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })
-                            : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-2 py-2.5">
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-700 hover:bg-blue-50 cursor-pointer"
-                              title="Добавить факт"
-                              onClick={() => { setAddValueFor(ind); setModalPeriod(currentPeriod()); setModalValue(""); setModalNote(""); }}
-                            >
-                              <PlusCircle size={14} />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-gray-400 hover:text-gray-700 cursor-pointer" onClick={() => openEdit(ind)}><Pencil size={12} /></Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-600 cursor-pointer" onClick={() => setDeleteId(ind.id)}><Trash2 size={12} /></Button>
-                          </div>
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr key={`${ind.id}-period`}>
-                          <td colSpan={8} className="p-0">
-                            <PeriodSection indicator={ind} />
-                          </td>
-                        </tr>
-                      )}
-                    </>
+                    <tr key={ind.id}
+                      className="hover:bg-blue-50 transition-colors cursor-pointer"
+                      onClick={() => setDetailIndicator(ind)}>
+                      <td className="px-3 py-2.5 text-xs text-gray-400 text-center">{idx + 1}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium text-gray-900 text-sm">{ind.name}</div>
+                        {ind.goal && <div className="text-[11px] text-gray-400 mt-0.5">{ind.goal.name}</div>}
+                      </td>
+                      <td className="px-3 py-2.5 text-sm text-gray-700">
+                        {ind.targetValue != null
+                          ? <>{ind.targetValue}{ind.unit && <span className="text-gray-400 ml-1">{ind.unit}</span>}</>
+                          : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-sm text-gray-700">
+                        {ind.actualValue != null
+                          ? <>{ind.actualValue}{ind.unit && <span className="text-gray-400 ml-1">{ind.unit}</span>}</>
+                          : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className={cn("px-3 py-2.5 text-sm font-semibold", pctColor)}>
+                        {pct != null ? `${pct}%` : <span className="text-gray-300 font-normal">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-sm text-gray-600">
+                        {ind.owner?.name ?? <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-sm text-gray-600">
+                        {ind.deadline
+                          ? new Date(ind.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })
+                          : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-2 py-2.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-gray-400 hover:text-gray-700 cursor-pointer" onClick={() => openEdit(ind)}><Pencil size={12} /></Button>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-600 cursor-pointer" onClick={() => setDeleteId(ind.id)}><Trash2 size={12} /></Button>
+                        </div>
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
@@ -427,43 +389,37 @@ export default function IndicatorsPage() {
       <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)}
         onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} loading={deleteMutation.isPending} />
 
-      <Dialog open={!!addValueFor} onOpenChange={(open) => { if (!open) setAddValueFor(null); }}>
-        <DialogContent className="max-w-sm">
+      <Dialog open={!!detailIndicator} onOpenChange={(open) => { if (!open) setDetailIndicator(null); }}>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Добавить факт</DialogTitle>
-            {addValueFor && <p className="text-sm text-gray-500 mt-0.5">{addValueFor.name}</p>}
+            <DialogTitle>{detailIndicator?.name}</DialogTitle>
+            {detailIndicator?.goal && (
+              <p className="text-sm text-gray-500 mt-0.5">{detailIndicator.goal.name}</p>
+            )}
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-1.5">
-              <Label>Период</Label>
-              <Select value={modalPeriod} onValueChange={(v) => setModalPeriod(v ?? currentPeriod())}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {monthOptions().map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
+          <div className="grid grid-cols-3 gap-3 py-2 border-b border-gray-100">
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">Цель</p>
+              <p className="text-sm font-medium text-gray-800">
+                {detailIndicator?.targetValue != null
+                  ? `${detailIndicator.targetValue}${detailIndicator.unit ? ` ${detailIndicator.unit}` : ""}`
+                  : "—"}
+              </p>
             </div>
-            <div className="space-y-1.5">
-              <Label>Фактическое значение{addValueFor?.unit ? ` (${addValueFor.unit})` : ""}</Label>
-              <Input
-                type="number" value={modalValue} onChange={(e) => setModalValue(e.target.value)}
-                placeholder="0" autoFocus
-              />
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">Ответственный</p>
+              <p className="text-sm font-medium text-gray-800">{detailIndicator?.owner?.name ?? "—"}</p>
             </div>
-            <div className="space-y-1.5">
-              <Label>Примечание <span className="text-gray-400 font-normal">(необязательно)</span></Label>
-              <Input value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="..." />
+            <div>
+              <p className="text-xs text-gray-400 mb-0.5">Дедлайн</p>
+              <p className="text-sm font-medium text-gray-800">
+                {detailIndicator?.deadline
+                  ? new Date(detailIndicator.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })
+                  : "—"}
+              </p>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddValueFor(null)}>Отмена</Button>
-            <Button
-              onClick={() => addValueFor && addValueMutation.mutate({ indicatorId: addValueFor.id, period: modalPeriod, value: Number(modalValue), note: modalNote })}
-              disabled={!modalValue || addValueMutation.isPending}
-            >
-              {addValueMutation.isPending ? "Сохранение..." : "Сохранить"}
-            </Button>
-          </DialogFooter>
+          {detailIndicator && <PeriodSection indicator={detailIndicator} />}
         </DialogContent>
       </Dialog>
     </div>
