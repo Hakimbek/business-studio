@@ -186,7 +186,7 @@ export default function IndicatorDetailPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Фактическое значение{indicator.unit ? ` (${indicator.unit})` : ""}</Label>
-              <Input type="number" value={value} onChange={(e) => setValue(e.target.value)} placeholder="0" autoFocus />
+              <Input type="number" value={value} onChange={(e) => setValue(e.target.value)} placeholder="Введите фактическое значение" autoFocus />
             </div>
           </div>
           <DialogFooter>
