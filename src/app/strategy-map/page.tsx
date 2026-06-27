@@ -4,7 +4,7 @@ import {
   forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Eye, Link2, PenLine, Plus, Pencil, Trash2, X, Map as MapIcon } from "lucide-react";
+import { ChevronDown, ChevronUp, Eye, Link2, PenLine, Plus, Pencil, Trash2, X, Map as MapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -83,6 +83,11 @@ const REGION_COLORS = [
   "#16a34a", "#2563eb", "#ea580c", "#9333ea",
   "#dc2626", "#0891b2", "#ca8a04", "#6b7280",
 ];
+
+const GOAL_D_EXP = 140;
+const GOAL_D_COL = 80;
+const PROJ_D_EXP = 130;
+const PROJ_D_COL = 96;
 
 // ── SVG Links overlay ─────────────────────────────────────────────────────────
 
@@ -299,10 +304,9 @@ const RegionBox = forwardRef<HTMLDivElement, {
 
 // ── Goal card ─────────────────────────────────────────────────────────────────
 
-const GOAL_D = 140;
-
 function GoalCard({
-  entry, pos, status, connectMode, isSource, viewMode, selectedPeriod, cardRef, onMouseDown, onRemove, onConnect, onPortConnect,
+  entry, pos, status, connectMode, isSource, viewMode, selectedPeriod, collapsed, cardRef,
+  onMouseDown, onRemove, onConnect, onPortConnect, onToggleCollapse,
 }: {
   entry: StrategyMapEntry;
   pos: { x: number; y: number };
@@ -311,71 +315,62 @@ function GoalCard({
   isSource: boolean;
   viewMode: boolean;
   selectedPeriod: string | null;
+  collapsed: boolean;
   cardRef: (el: HTMLElement | null) => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onRemove: () => void;
   onConnect: () => void;
   onPortConnect: () => void;
+  onToggleCollapse: () => void;
 }) {
   const goal = entry.goal;
   const rag = status ? RAG[status] : null;
   const borderColor = rag?.border ?? "#6366f1";
   const bgColor     = rag?.bg ?? "#ffffff";
+  const d = collapsed ? GOAL_D_COL : GOAL_D_EXP;
 
   return (
     <div
       ref={cardRef}
       className={cn(
-        "absolute group rounded-full border-4 shadow-md select-none overflow-visible transition-shadow",
+        "absolute group rounded-full border-4 shadow-md select-none overflow-visible transition-all",
         "flex flex-col items-center justify-center text-center",
-        viewMode
-          ? "cursor-default hover:shadow-lg"
-          : connectMode
-            ? "cursor-pointer hover:shadow-lg"
-            : "cursor-move hover:shadow-lg",
+        viewMode ? "cursor-default hover:shadow-lg" : connectMode ? "cursor-pointer hover:shadow-lg" : "cursor-move hover:shadow-lg",
         isSource && "ring-4 ring-offset-2 ring-pulse",
       )}
-      style={{
-        transform: `translate(${pos.x}px, ${pos.y}px)`,
-        width: GOAL_D, height: GOAL_D,
-        zIndex: 10,
-        borderColor,
-        background: bgColor,
-        "--tw-ring-color": borderColor,
-      } as React.CSSProperties}
+      style={{ transform: `translate(${pos.x}px, ${pos.y}px)`, width: d, height: d, zIndex: 10, borderColor, background: bgColor, "--tw-ring-color": borderColor } as React.CSSProperties}
       onMouseDown={viewMode ? undefined : connectMode ? undefined : onMouseDown}
       onClick={!viewMode && connectMode ? onConnect : undefined}
     >
-      <div className="px-3 w-full">
-        <p className="text-[11px] font-semibold text-gray-800 leading-tight line-clamp-3">{goal.name}</p>
-        {rag && (
+      <div className="px-2 w-full">
+        <p className={cn("font-semibold text-gray-800 leading-tight", collapsed ? "text-[10px] line-clamp-1" : "text-[11px] line-clamp-3")}>{goal.name}</p>
+        {!collapsed && rag && (
           <div className="mt-1.5 flex justify-center">
             <span className="w-2 h-2 rounded-full inline-block" style={{ background: borderColor }} />
           </div>
         )}
       </div>
 
-      {/* Port circle — only in edit mode */}
       {!viewMode && (
-        <div
-          title="Соединить"
-          className={cn(
-            "absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow cursor-pointer z-30 transition-opacity",
-            connectMode ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-            isSource && "scale-125",
-          )}
+        <div title="Соединить"
+          className={cn("absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow cursor-pointer z-30 transition-opacity",
+            connectMode ? "opacity-100" : "opacity-0 group-hover:opacity-100", isSource && "scale-125")}
           style={{ background: borderColor }}
           onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onPortConnect(); }}
-        />
+          onClick={(e) => { e.stopPropagation(); onPortConnect(); }} />
       )}
 
-      {/* Delete — only in edit mode */}
       {!viewMode && !connectMode && (
-        <button
-          className="absolute -top-2 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow"
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
-        ><X size={10} /></button>
+        <button className="absolute -top-2 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}><X size={10} /></button>
+      )}
+
+      {!viewMode && (
+        <button className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-5 h-5 rounded-full bg-white text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}>
+          {collapsed ? <ChevronDown size={9} /> : <ChevronUp size={9} />}
+        </button>
       )}
     </div>
   );
@@ -384,7 +379,8 @@ function GoalCard({
 // ── Indicator card ────────────────────────────────────────────────────────────
 
 function IndicatorCard({
-  entry, pos, connectMode, isSource, viewMode, selectedPeriod, cardRef, onMouseDown, onRemove, onConnect, onPortConnect,
+  entry, pos, connectMode, isSource, viewMode, selectedPeriod, collapsed, cardRef,
+  onMouseDown, onRemove, onConnect, onPortConnect, onToggleCollapse,
 }: {
   entry: StrategyMapIndicatorEntry;
   pos: { x: number; y: number };
@@ -392,11 +388,13 @@ function IndicatorCard({
   isSource: boolean;
   viewMode: boolean;
   selectedPeriod: string | null;
+  collapsed: boolean;
   cardRef: (el: HTMLElement | null) => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onRemove: () => void;
   onConnect: () => void;
   onPortConnect: () => void;
+  onToggleCollapse: () => void;
 }) {
   const ind = entry.indicator;
   const status = indicatorStatus(ind, selectedPeriod);
@@ -425,124 +423,142 @@ function IndicatorCard({
       onMouseDown={viewMode ? undefined : connectMode ? undefined : onMouseDown}
       onClick={!viewMode && connectMode ? onConnect : undefined}
     >
-      <div className="p-3">
+      <div className="p-3 pb-2">
         <p className="text-xs font-semibold text-gray-800 leading-snug">{ind.name}</p>
-        <div className="mt-1.5 flex items-center gap-2">
-          {ind.targetValue != null && (
-            <p className="text-[10px] text-gray-500">
-              Цель: <strong className="text-gray-700">{ind.targetValue}{ind.unit ? ` ${ind.unit}` : ""}</strong>
-            </p>
-          )}
-          {pct != null && (
-            <span className={cn("text-[10px] font-bold ml-auto", rag?.badge ?? "text-gray-400")}>
-              {pct}%
-            </span>
-          )}
-        </div>
-        {pct != null && (
-          <div className="mt-1.5 h-1 rounded-full bg-gray-200 overflow-hidden">
-            <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: borderColor }} />
-          </div>
+        {!collapsed && (
+          <>
+            <div className="mt-1.5 flex items-center gap-2">
+              {ind.targetValue != null && (
+                <p className="text-[10px] text-gray-500">Цель: <strong className="text-gray-700">{ind.targetValue}{ind.unit ? ` ${ind.unit}` : ""}</strong></p>
+              )}
+              {pct != null && <span className={cn("text-[10px] font-bold ml-auto", rag?.badge ?? "text-gray-400")}>{pct}%</span>}
+            </div>
+            {pct != null && (
+              <div className="mt-1.5 h-1 rounded-full bg-gray-200 overflow-hidden">
+                <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: borderColor }} />
+              </div>
+            )}
+          </>
+        )}
+        {collapsed && pct != null && (
+          <span className={cn("text-[10px] font-bold", rag?.badge ?? "text-gray-400")}>{pct}%</span>
         )}
       </div>
 
-      {/* Port circle — only in edit mode */}
       {!viewMode && (
-        <div
-          title="Соединить с целью"
-          className={cn(
-            "absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow cursor-pointer z-30 transition-opacity",
-            connectMode ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-            isSource && "scale-125",
-          )}
+        <div title="Соединить с целью"
+          className={cn("absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow cursor-pointer z-30 transition-opacity",
+            connectMode ? "opacity-100" : "opacity-0 group-hover:opacity-100", isSource && "scale-125")}
           style={{ background: borderColor }}
           onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onPortConnect(); }}
-        />
+          onClick={(e) => { e.stopPropagation(); onPortConnect(); }} />
       )}
 
-      {/* Delete — only in edit mode */}
       {!viewMode && !connectMode && (
-        <button
-          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-white/90 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow-sm"
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
-        ><X size={10} /></button>
+        <button className="absolute top-1 right-1 w-5 h-5 rounded-full bg-white/90 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow-sm"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}><X size={10} /></button>
+      )}
+
+      {!viewMode && (
+        <button className="absolute bottom-0.5 left-1 w-4 h-4 rounded text-gray-300 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}>
+          {collapsed ? <ChevronDown size={10} /> : <ChevronUp size={10} />}
+        </button>
       )}
     </div>
   );
 }
 
-// ── Project card ──────────────────────────────────────────────────────────────
+// ── Project card (diamond) ────────────────────────────────────────────────────
 
 const PROJECT_STATUS_LABEL: Record<string, string> = {
-  ACTIVE: "Активный", ON_HOLD: "Приостановлен", COMPLETED: "Завершён", CANCELLED: "Отменён",
+  ACTIVE: "Активный", ON_HOLD: "Приост.", COMPLETED: "Завершён", CANCELLED: "Отменён",
 };
 const PROJECT_STATUS_COLOR: Record<string, string> = {
   ACTIVE: "#2563eb", ON_HOLD: "#ca8a04", COMPLETED: "#16a34a", CANCELLED: "#6b7280",
 };
 
 function ProjectCard({
-  entry, pos, connectMode, isSource, viewMode, cardRef, onMouseDown, onRemove, onConnect, onPortConnect,
+  entry, pos, connectMode, isSource, viewMode, collapsed, cardRef,
+  onMouseDown, onRemove, onConnect, onPortConnect, onToggleCollapse,
 }: {
   entry: StrategyMapProjectEntry;
   pos: { x: number; y: number };
   connectMode: boolean;
   isSource: boolean;
   viewMode: boolean;
+  collapsed: boolean;
   cardRef: (el: HTMLElement | null) => void;
   onMouseDown: (e: React.MouseEvent) => void;
   onRemove: () => void;
   onConnect: () => void;
   onPortConnect: () => void;
+  onToggleCollapse: () => void;
 }) {
   const proj = entry.project;
   const statusColor = PROJECT_STATUS_COLOR[proj.status] ?? "#ea580c";
+  const D = collapsed ? PROJ_D_COL : PROJ_D_EXP;
+  const inner = Math.round(D / Math.SQRT2);
+  const offset = Math.round((D - inner) / 2);
 
   return (
     <div
       ref={cardRef}
-      className={cn(
-        "absolute group rounded-xl shadow-sm border border-gray-200 select-none overflow-visible transition-shadow",
-        viewMode ? "cursor-default hover:shadow-md" : connectMode ? "cursor-pointer hover:shadow-md" : "cursor-move hover:shadow-md",
-        isSource && "ring-2 ring-pulse",
-      )}
-      style={{ transform: `translate(${pos.x}px, ${pos.y}px)`, width: 170, zIndex: 10, borderLeft: `4px solid ${statusColor}`, background: "#fff", ["--tw-ring-color" as string]: statusColor }}
+      className={cn("absolute group select-none overflow-visible transition-all", isSource && "ring-pulse")}
+      style={{ transform: `translate(${pos.x}px, ${pos.y}px)`, width: D, height: D, zIndex: 10, ["--tw-ring-color" as string]: statusColor }}
       onMouseDown={viewMode ? undefined : connectMode ? undefined : onMouseDown}
       onClick={!viewMode && connectMode ? onConnect : undefined}
     >
-      <div className="p-3">
-        <p className="text-xs font-semibold text-gray-800 leading-snug">{proj.name}</p>
-        <div className="mt-1.5 flex items-center gap-1.5">
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: `${statusColor}18`, color: statusColor }}>
-            {PROJECT_STATUS_LABEL[proj.status] ?? proj.status}
-          </span>
-        </div>
-        {proj.deadline && (
-          <p className="mt-1 text-[10px] text-gray-400">
-            до {new Date(proj.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}
-          </p>
+      {/* Diamond shape */}
+      <div className={cn(
+        "absolute shadow-md transition-all",
+        viewMode ? "cursor-default" : connectMode ? "cursor-pointer" : "cursor-move",
+        isSource && "ring-2 ring-offset-2",
+      )}
+        style={{ left: offset, top: offset, width: inner, height: inner, transform: "rotate(45deg)", background: "#fff", border: `3px solid ${statusColor}`, borderRadius: 4 }} />
+
+      {/* Content — not rotated */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-2 text-center">
+        <p className={cn("font-semibold text-gray-800 leading-tight", collapsed ? "text-[9px] line-clamp-1" : "text-[10px] line-clamp-2")}>{proj.name}</p>
+        {!collapsed && (
+          <>
+            <span className="text-[9px] font-medium mt-1" style={{ color: statusColor }}>
+              {PROJECT_STATUS_LABEL[proj.status] ?? proj.status}
+            </span>
+            {proj.deadline && (
+              <p className="text-[9px] text-gray-400 mt-0.5">
+                до {new Date(proj.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
+              </p>
+            )}
+          </>
         )}
       </div>
 
+      {/* Port — right tip */}
       {!viewMode && (
-        <div
-          title="Соединить с целью"
-          className={cn(
-            "absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow cursor-pointer z-30 transition-opacity",
-            connectMode ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-            isSource && "scale-125",
-          )}
+        <div title="Соединить с целью"
+          className={cn("absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow cursor-pointer z-30 transition-opacity",
+            connectMode ? "opacity-100" : "opacity-0 group-hover:opacity-100", isSource && "scale-125")}
           style={{ background: statusColor }}
           onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => { e.stopPropagation(); onPortConnect(); }}
-        />
+          onClick={(e) => { e.stopPropagation(); onPortConnect(); }} />
       )}
 
+      {/* Delete — top tip */}
       {!viewMode && !connectMode && (
-        <button
-          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-white/90 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow-sm"
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
-        ><X size={10} /></button>
+        <button className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}><X size={10} /></button>
+      )}
+
+      {/* Collapse toggle — bottom tip */}
+      {!viewMode && (
+        <button className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-5 h-5 rounded-full bg-white text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow"
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onToggleCollapse(); }}>
+          {collapsed ? <ChevronDown size={9} /> : <ChevronUp size={9} />}
+        </button>
       )}
     </div>
   );
@@ -616,6 +632,15 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
   const [connecting, setConnecting] = useState<ConnectSource | null>(null);
   const [addRegionOpen, setAddRegionOpen] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+
+  function toggleCollapse(id: string) {
+    setCollapsedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
 
   const allPeriods = useMemo(() => {
     const seen = new Set<string>();
@@ -970,13 +995,15 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
                   status={goalStatus(entry.goalId, board.indicatorLinks, board.indicatorEntries, selectedPeriod)}
                   connectMode={connectMode}
                   isSource={connecting?.id === entry.goalId && connecting?.kind === "goal"}
+                  collapsed={collapsedIds.has(entry.goalId)}
                   cardRef={(el) => { if (el) cardRefs.current.set(entry.goalId, el); else cardRefs.current.delete(entry.goalId); }}
                   onMouseDown={(e) => startDrag(e,
                     { kind: "goal", id: entry.goalId, startCX: e.clientX, startCY: e.clientY, startEX: pos.x, startEY: pos.y },
                     cardRefs.current.get(entry.goalId) ?? null)}
                   onRemove={() => removeGoalMut.mutate(entry.goalId)}
                   onConnect={() => handleConnect("goal", entry.goalId)}
-                  onPortConnect={() => handlePortConnect("goal", entry.goalId)} />
+                  onPortConnect={() => handlePortConnect("goal", entry.goalId)}
+                  onToggleCollapse={() => toggleCollapse(entry.goalId)} />
               );
             })}
 
@@ -988,13 +1015,15 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
                 <IndicatorCard key={ie.id} entry={ie} pos={pos} viewMode={viewMode} selectedPeriod={selectedPeriod}
                   connectMode={connectMode}
                   isSource={connecting?.id === ie.indicatorId && connecting?.kind === "indicator"}
+                  collapsed={collapsedIds.has(`ind-${ie.indicatorId}`)}
                   cardRef={(el) => { if (el) cardRefs.current.set(`ind-${ie.indicatorId}`, el); else cardRefs.current.delete(`ind-${ie.indicatorId}`); }}
                   onMouseDown={(e) => startDrag(e,
                     { kind: "indicator", id: ie.indicatorId, startCX: e.clientX, startCY: e.clientY, startEX: pos.x, startEY: pos.y },
                     cardRefs.current.get(`ind-${ie.indicatorId}`) ?? null)}
                   onRemove={() => removeIndMut.mutate(ie.indicatorId)}
                   onConnect={() => handleConnect("indicator", ie.indicatorId)}
-                  onPortConnect={() => handlePortConnect("indicator", ie.indicatorId)} />
+                  onPortConnect={() => handlePortConnect("indicator", ie.indicatorId)}
+                  onToggleCollapse={() => toggleCollapse(`ind-${ie.indicatorId}`)} />
               );
             })}
 
@@ -1006,13 +1035,15 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
                 <ProjectCard key={pe.id} entry={pe} pos={pos} viewMode={viewMode}
                   connectMode={connectMode}
                   isSource={connecting?.id === pe.projectId && connecting?.kind === "project"}
+                  collapsed={collapsedIds.has(`proj-${pe.projectId}`)}
                   cardRef={(el) => { if (el) cardRefs.current.set(`proj-${pe.projectId}`, el); else cardRefs.current.delete(`proj-${pe.projectId}`); }}
                   onMouseDown={(e) => startDrag(e,
                     { kind: "project", id: pe.projectId, startCX: e.clientX, startCY: e.clientY, startEX: pos.x, startEY: pos.y },
                     cardRefs.current.get(`proj-${pe.projectId}`) ?? null)}
                   onRemove={() => removeProjMut.mutate(pe.projectId)}
                   onConnect={() => handleConnect("project", pe.projectId)}
-                  onPortConnect={() => handlePortConnect("project", pe.projectId)} />
+                  onPortConnect={() => handlePortConnect("project", pe.projectId)}
+                  onToggleCollapse={() => toggleCollapse(`proj-${pe.projectId}`)} />
               );
             })}
 
