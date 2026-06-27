@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Pencil, PlusCircle, Trash2, X } from "lucide-react";
+import { ChevronRight, Pencil, PlusCircle, Trash2, X, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddButton } from "@/components/shared/AddButton";
 import { Badge } from "@/components/ui/badge";
@@ -164,6 +164,8 @@ export default function IndicatorsPage() {
   const [editItem, setEditItem] = useState<Indicator | null>(null);
   const [form, setForm] = useState<FormState>(empty);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(null);
 
   const { data: indicators = [], isLoading } = useQuery<Indicator[]>({
     queryKey: ["indicators"],
@@ -206,6 +208,20 @@ export default function IndicatorsPage() {
 
   const loading = createMutation.isPending || updateMutation.isPending;
 
+  const visibleIndicators = useMemo(() => {
+    let list = indicators.filter((ind) =>
+      ind.name.toLowerCase().includes(search.toLowerCase())
+    );
+    if (sortDir) {
+      list = [...list].sort((a, b) => {
+        const da = a.deadline ? new Date(a.deadline).getTime() : (sortDir === "asc" ? Infinity : -Infinity);
+        const db = b.deadline ? new Date(b.deadline).getTime() : (sortDir === "asc" ? Infinity : -Infinity);
+        return sortDir === "asc" ? da - db : db - da;
+      });
+    }
+    return list;
+  }, [indicators, search, sortDir]);
+
   return (
     <div className="flex-1 overflow-auto">
       <PageHeader
@@ -225,6 +241,18 @@ export default function IndicatorsPage() {
         )}
 
         {indicators.length > 0 && (
+          <div className="mb-3 relative max-w-xs">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Поиск по названию..."
+              className="w-full pl-8 pr-3 h-8 text-sm border border-gray-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors"
+            />
+          </div>
+        )}
+
+        {indicators.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead>
@@ -235,12 +263,25 @@ export default function IndicatorsPage() {
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Факт</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">%</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ответственный</th>
-                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Дедлайн</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                    <button
+                      onClick={() => setSortDir((d) => d === "asc" ? "desc" : d === "desc" ? null : "asc")}
+                      className="flex items-center gap-1 hover:text-gray-800 transition-colors cursor-pointer"
+                    >
+                      Дедлайн
+                      {sortDir === "asc" ? <ArrowUp size={11} className="text-blue-500" /> : sortDir === "desc" ? <ArrowDown size={11} className="text-blue-500" /> : <ArrowUpDown size={11} className="text-gray-300" />}
+                    </button>
+                  </th>
                   <th className="w-16" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {indicators.map((ind) => {
+                {visibleIndicators.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-6 text-sm text-center text-gray-400">Ничего не найдено</td>
+                  </tr>
+                )}
+                {visibleIndicators.map((ind) => {
                   const isExpanded = expandedId === ind.id;
                   const pct = ind.targetValue && ind.actualValue != null
                     ? Math.round((ind.actualValue / ind.targetValue) * 100)
