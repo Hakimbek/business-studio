@@ -36,7 +36,6 @@ export default function IndicatorDetailPage() {
 
   const [period, setPeriod] = useState(currentPeriod());
   const [value, setValue] = useState("");
-  const [note, setNote] = useState("");
   const [adding, setAdding] = useState(false);
 
   const { data: indicator, isLoading } = useQuery<Indicator>({
@@ -55,7 +54,7 @@ export default function IndicatorDetailPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["indicator-values", id] });
       qc.invalidateQueries({ queryKey: ["indicators"] });
-      setValue(""); setNote(""); setAdding(false);
+      setValue(""); setAdding(false);
     },
   });
 
@@ -133,7 +132,7 @@ export default function IndicatorDetailPage() {
 
           {adding && (
             <div className="px-4 py-3 border-b border-gray-100 bg-blue-50/50">
-              <div className="grid grid-cols-3 gap-3 mb-3">
+              <div className="grid grid-cols-2 gap-3 mb-3">
                 <div>
                   <Label className="text-xs mb-1 block">Период</Label>
                   <Select value={period} onValueChange={(v) => setPeriod(v ?? currentPeriod())}>
@@ -147,15 +146,11 @@ export default function IndicatorDetailPage() {
                   <Label className="text-xs mb-1 block">Факт{indicator.unit ? ` (${indicator.unit})` : ""}</Label>
                   <Input type="number" value={value} onChange={(e) => setValue(e.target.value)} placeholder="0" className="h-8 text-xs" autoFocus />
                 </div>
-                <div>
-                  <Label className="text-xs mb-1 block">Примечание</Label>
-                  <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="необязательно" className="h-8 text-xs" />
-                </div>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setAdding(false)}>Отмена</Button>
                 <Button size="sm" className="h-7 text-xs"
-                  onClick={() => addMut.mutate({ indicatorId: id, period, value: Number(value), note })}
+                  onClick={() => addMut.mutate({ indicatorId: id, period, value: Number(value), note: "" })}
                   disabled={!value || addMut.isPending}>
                   {addMut.isPending ? "Сохранение..." : "Сохранить"}
                 </Button>
