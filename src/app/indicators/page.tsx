@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Trash2, ChevronDown, ChevronUp, PlusCircle, X } from "lucide-react";
+import { ChevronRight, Pencil, PlusCircle, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddButton } from "@/components/shared/AddButton";
 import { Badge } from "@/components/ui/badge";
@@ -12,10 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/PageHeader";
-
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import type { Indicator } from "@/types";
 import { periodLabel, MONTHS_RU } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
 
@@ -35,27 +35,12 @@ function monthOptions() {
   return options.reverse();
 }
 
-function ProgressBar({ target, actual }: { target?: number | null; actual?: number | null }) {
-  if (!target) return null;
-  const pct = Math.min(100, Math.round(((actual ?? 0) / target) * 100));
-  const color = pct >= 100 ? "bg-green-500" : pct >= 70 ? "bg-yellow-400" : "bg-red-400";
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 bg-gray-100 rounded-full h-1.5">
-        <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-xs text-gray-500 w-8 text-right">{pct}%</span>
-    </div>
-  );
-}
-
-// ─── Period entry sub-component ───────────────────────────────────────────────
+// ─── Period section ───────────────────────────────────────────────────────────
 
 interface IndicatorValue { id: string; period: string; value: number; note?: string | null; }
 
 function PeriodSection({ indicator }: { indicator: Indicator }) {
   const qc = useQueryClient();
-  const [expanded, setExpanded] = useState(false);
   const [period, setPeriod] = useState(currentPeriod());
   const [value, setValue] = useState("");
   const [note, setNote] = useState("");
@@ -64,7 +49,6 @@ function PeriodSection({ indicator }: { indicator: Indicator }) {
   const { data: values = [] } = useQuery<IndicatorValue[]>({
     queryKey: ["indicator-values", indicator.id],
     queryFn: () => fetch(`/api/indicator-values?indicatorId=${indicator.id}`).then((r) => r.json()),
-    enabled: expanded,
   });
 
   const addMut = useMutation({
@@ -73,9 +57,7 @@ function PeriodSection({ indicator }: { indicator: Indicator }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["indicator-values", indicator.id] });
       qc.invalidateQueries({ queryKey: ["indicators"] });
-      setValue("");
-      setNote("");
-      setAdding(false);
+      setValue(""); setNote(""); setAdding(false);
     },
   });
 
@@ -90,108 +72,82 @@ function PeriodSection({ indicator }: { indicator: Indicator }) {
   const months = monthOptions();
 
   return (
-    <div className="mt-3 border-t border-gray-100 pt-3">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-800 font-medium"
-      >
-        {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-        {expanded ? "Скрыть историю" : "Данные по периодам"}
-        {values.length > 0 && !expanded && (
-          <Badge variant="outline" className="text-[10px] px-1 py-0 ml-1">{values.length}</Badge>
-        )}
-      </button>
+    <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 space-y-3">
+      {values.length > 0 && (
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-gray-400 font-medium">
+              <th className="text-left pb-1.5">Период</th>
+              <th className="text-right pb-1.5">Факт</th>
+              <th className="text-right pb-1.5">Цель</th>
+              <th className="text-right pb-1.5">%</th>
+              <th className="w-6" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {values.map((v) => {
+              const pct = indicator.targetValue ? Math.round((v.value / indicator.targetValue) * 100) : null;
+              const pctColor = pct == null ? "text-gray-400" : pct >= 100 ? "text-green-600" : pct >= 70 ? "text-yellow-600" : "text-red-500";
+              return (
+                <tr key={v.id} className="group hover:bg-gray-100 transition-colors">
+                  <td className="py-1.5 text-gray-700 font-medium">{periodLabel(v.period)}</td>
+                  <td className="py-1.5 text-right text-gray-900 font-semibold">{v.value}{indicator.unit ? ` ${indicator.unit}` : ""}</td>
+                  <td className="py-1.5 text-right text-gray-400">{indicator.targetValue ?? "—"}{indicator.unit ? ` ${indicator.unit}` : ""}</td>
+                  <td className={`py-1.5 text-right font-bold ${pctColor}`}>{pct != null ? `${pct}%` : "—"}</td>
+                  <td className="py-1.5 text-right">
+                    <button onClick={() => deleteMut.mutate(v.id)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity cursor-pointer">
+                      <X size={12} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
 
-      {expanded && (
-        <div className="mt-3 space-y-2">
-          {/* History table */}
-          {values.length > 0 && (
-            <div className="rounded-lg border border-gray-100 overflow-hidden">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-100">
-                    <th className="text-left px-3 py-2 text-gray-500 font-medium">Период</th>
-                    <th className="text-right px-3 py-2 text-gray-500 font-medium">Факт</th>
-                    <th className="text-right px-3 py-2 text-gray-500 font-medium">Цель</th>
-                    <th className="text-right px-3 py-2 text-gray-500 font-medium">%</th>
-                    <th className="px-2 py-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {values.map((v) => {
-                    const pct = indicator.targetValue ? Math.round((v.value / indicator.targetValue) * 100) : null;
-                    const pctColor = pct == null ? "text-gray-400" : pct >= 100 ? "text-green-600" : pct >= 70 ? "text-yellow-600" : "text-red-500";
-                    return (
-                      <tr key={v.id} className="border-b border-gray-50 hover:bg-gray-50 group">
-                        <td className="px-3 py-2 text-gray-700 font-medium">{periodLabel(v.period)}</td>
-                        <td className="px-3 py-2 text-right text-gray-900 font-semibold">{v.value}{indicator.unit ? ` ${indicator.unit}` : ""}</td>
-                        <td className="px-3 py-2 text-right text-gray-400">{indicator.targetValue ?? "—"}{indicator.unit ? ` ${indicator.unit}` : ""}</td>
-                        <td className={`px-3 py-2 text-right font-bold ${pctColor}`}>{pct != null ? `${pct}%` : "—"}</td>
-                        <td className="px-2 py-2">
-                          <button onClick={() => deleteMut.mutate(v.id)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity">
-                            <X size={12} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+      {values.length === 0 && !adding && (
+        <p className="text-xs text-gray-400">Данных пока нет</p>
+      )}
+
+      {adding ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <Label className="text-xs mb-1 block">Период</Label>
+              <Select value={period} onValueChange={(v) => setPeriod(v ?? currentPeriod())}>
+                <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {months.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
-          )}
-
-          {values.length === 0 && !adding && (
-            <p className="text-xs text-gray-400 text-center py-2">Данных пока нет</p>
-          )}
-
-          {/* Add form */}
-          {adding ? (
-            <div className="bg-blue-50 rounded-lg p-3 space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs mb-1 block">Период</Label>
-                  <Select value={period} onValueChange={(v) => setPeriod(v ?? currentPeriod())}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {months.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs mb-1 block">Фактическое значение{indicator.unit ? ` (${indicator.unit})` : ""}</Label>
-                  <Input
-                    type="number"
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    placeholder={indicator.targetValue?.toString() ?? "0"}
-                    className="h-8 text-xs"
-                    autoFocus
-                  />
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs mb-1 block">Примечание</Label>
-                <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Необязательно" className="h-8 text-xs" />
-              </div>
-              <div className="flex gap-2 justify-end">
-                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setAdding(false)}>Отмена</Button>
-                <Button size="sm" className="h-7 text-xs" onClick={() => addMut.mutate({ indicatorId: indicator.id, period, value: Number(value), note })} disabled={!value || addMut.isPending}>
-                  {addMut.isPending ? "..." : "Сохранить"}
-                </Button>
-              </div>
+            <div>
+              <Label className="text-xs mb-1 block">Факт{indicator.unit ? ` (${indicator.unit})` : ""}</Label>
+              <Input type="number" value={value} onChange={(e) => setValue(e.target.value)}
+                placeholder="0" className="h-7 text-xs" autoFocus />
             </div>
-          ) : (
-            <button onClick={() => setAdding(true)} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-blue-600 transition-colors">
-              <PlusCircle size={13} />Добавить данные за период
-            </button>
-          )}
+          </div>
+          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Примечание (необязательно)" className="h-7 text-xs" />
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => setAdding(false)}>Отмена</Button>
+            <Button size="sm" className="h-6 text-xs px-2"
+              onClick={() => addMut.mutate({ indicatorId: indicator.id, period, value: Number(value), note })}
+              disabled={!value || addMut.isPending}>
+              {addMut.isPending ? "..." : "Сохранить"}
+            </Button>
+          </div>
         </div>
+      ) : (
+        <button onClick={() => setAdding(true)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-600 transition-colors cursor-pointer">
+          <PlusCircle size={12} /> Добавить период
+        </button>
       )}
     </div>
   );
 }
 
-// ─── Main form ────────────────────────────────────────────────────────────────
+// ─── Form ─────────────────────────────────────────────────────────────────────
 
 interface FormState {
   name: string; description: string; unit: string;
@@ -207,6 +163,7 @@ export default function IndicatorsPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editItem, setEditItem] = useState<Indicator | null>(null);
   const [form, setForm] = useState<FormState>(empty);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const { data: indicators = [], isLoading } = useQuery<Indicator[]>({
     queryKey: ["indicators"],
@@ -221,7 +178,7 @@ export default function IndicatorsPage() {
   const createMutation = useMutation({
     mutationFn: (data: FormState) =>
       fetch("/api/indicators", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then((r) => r.json()),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["indicators"] }); qc.invalidateQueries({ queryKey: ["stats"] }); closeDialog(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["indicators"] }); closeDialog(); },
   });
 
   const updateMutation = useMutation({
@@ -232,7 +189,7 @@ export default function IndicatorsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => fetch(`/api/indicators/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["indicators"] }); qc.invalidateQueries({ queryKey: ["stats"] }); setDeleteId(null); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["indicators"] }); setDeleteId(null); },
   });
 
   function openCreate() { setEditItem(null); setForm(empty); setDialogOpen(true); }
@@ -258,7 +215,7 @@ export default function IndicatorsPage() {
       />
 
       <div className="p-4">
-        {isLoading && <p className="text-sm text-gray-400 px-2">Загрузка...</p>}
+        {isLoading && <p className="text-sm text-gray-400">Загрузка...</p>}
 
         {!isLoading && indicators.length === 0 && (
           <div className="text-center py-16 text-gray-400">
@@ -267,31 +224,89 @@ export default function IndicatorsPage() {
           </div>
         )}
 
-        <div className="space-y-2">
-          {indicators.map((ind) => (
-            <div key={ind.id} className="bg-white rounded-xl border border-gray-200 p-4 group">
-              <div className="flex items-start gap-4">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-sm text-gray-900">{ind.name}</span>
-                    {ind.unit && <Badge variant="outline" className="text-xs">{ind.unit}</Badge>}
-                  </div>
-                  {ind.goal && <p className="text-xs text-gray-400 mb-1">Цель: {ind.goal.name}</p>}
-                  <div className="flex items-center flex-wrap gap-x-5 gap-y-0.5 text-xs text-gray-500 mb-2">
-                    <span>Целевое: <strong className="text-gray-800">{ind.targetValue ?? "—"}{ind.unit ? ` ${ind.unit}` : ""}</strong></span>
-                    {ind.owner && <span>Ответственный: <strong className="text-gray-800">{ind.owner.name}</strong></span>}
-                    {ind.deadline && <span>Дедлайн: <strong className="text-gray-800">{new Date(ind.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}</strong></span>}
-                  </div>
-                  <PeriodSection indicator={ind} />
-                </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(ind)}><Pencil size={13} /></Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600" onClick={() => setDeleteId(ind.id)}><Trash2 size={13} /></Button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        {indicators.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50">
+                  <th className="w-8" />
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Название</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Цель (зн.)</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Факт</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">%</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ответственный</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Дедлайн</th>
+                  <th className="w-16" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {indicators.map((ind) => {
+                  const isExpanded = expandedId === ind.id;
+                  const pct = ind.targetValue && ind.actualValue != null
+                    ? Math.round((ind.actualValue / ind.targetValue) * 100)
+                    : null;
+                  const pctColor = pct == null ? "text-gray-400"
+                    : pct >= 100 ? "text-green-600"
+                    : pct >= 70  ? "text-yellow-600"
+                    : "text-red-500";
+
+                  return (
+                    <>
+                      <tr key={ind.id}
+                        className={cn("group hover:bg-gray-50 transition-colors", isExpanded && "bg-blue-50 hover:bg-blue-50")}>
+                        <td className="pl-3">
+                          <button
+                            onClick={() => setExpandedId(isExpanded ? null : ind.id)}
+                            className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-blue-600 transition-all cursor-pointer">
+                            <ChevronRight size={14} className={cn("transition-transform", isExpanded && "rotate-90 text-blue-600")} />
+                          </button>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="font-medium text-gray-900 text-sm">{ind.name}</div>
+                          {ind.goal && <div className="text-[11px] text-gray-400 mt-0.5">{ind.goal.name}</div>}
+                        </td>
+                        <td className="px-3 py-2.5 text-sm text-gray-700">
+                          {ind.targetValue != null
+                            ? <>{ind.targetValue}{ind.unit && <span className="text-gray-400 ml-1">{ind.unit}</span>}</>
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-sm text-gray-700">
+                          {ind.actualValue != null
+                            ? <>{ind.actualValue}{ind.unit && <span className="text-gray-400 ml-1">{ind.unit}</span>}</>
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className={cn("px-3 py-2.5 text-sm font-semibold", pctColor)}>
+                          {pct != null ? `${pct}%` : <span className="text-gray-300 font-normal">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-sm text-gray-600">
+                          {ind.owner?.name ?? <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-sm text-gray-600">
+                          {ind.deadline
+                            ? new Date(ind.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-2 py-2.5">
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit(ind)}><Pencil size={12} /></Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-600" onClick={() => setDeleteId(ind.id)}><Trash2 size={12} /></Button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr key={`${ind.id}-period`}>
+                          <td colSpan={8} className="p-0">
+                            <PeriodSection indicator={ind} />
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={closeDialog}>
@@ -346,7 +361,8 @@ export default function IndicatorsPage() {
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} loading={deleteMutation.isPending} />
+      <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)}
+        onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} loading={deleteMutation.isPending} />
     </div>
   );
 }

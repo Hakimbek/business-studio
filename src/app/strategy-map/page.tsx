@@ -740,7 +740,7 @@ function BoardView({ board, allGoals, allIndicators }: {
                     "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer",
                     !connectMode ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"
                   )}>
-                  <Link2 size={11} /> Режим связи выкл
+                  <Link2 size={11} /> Режим перемещения
                 </button>
                 <button
                   onClick={() => setConnectMode(true)}
@@ -748,7 +748,7 @@ function BoardView({ board, allGoals, allIndicators }: {
                     "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer",
                     connectMode ? "bg-white text-gray-800 shadow-sm" : "text-gray-500 hover:text-gray-700"
                   )}>
-                  <Link2 size={11} /> Режим связи вкл
+                  <Link2 size={11} /> Режим связи
                 </button>
               </div>
               {connectMode && (
