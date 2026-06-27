@@ -102,6 +102,8 @@ model StrategyMapBoard {
   regions          StrategyMapRegion[]
   indicatorEntries StrategyMapIndicatorEntry[]
   indicatorLinks   StrategyMapIndicatorLink[]
+  projectEntries   StrategyMapProjectEntry[]
+  projectLinks     StrategyMapProjectLink[]
   createdAt        DateTime                   @default(now())
   updatedAt        DateTime                   @updatedAt
 }
@@ -320,6 +322,32 @@ model Project {
   ownerId String?
   owner   Position? @relation("ProjectOwner", fields: [ownerId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime                    @default(now())
+  updatedAt  DateTime                    @updatedAt
+  mapEntries StrategyMapProjectEntry[]
+}
+
+model StrategyMapProjectEntry {
+  id        String           @id @default(cuid())
+  x         Float            @default(100)
+  y         Float            @default(100)
+  boardId   String
+  board     StrategyMapBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  projectId String
+  project   Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@unique([boardId, projectId])
+}
+
+model StrategyMapProjectLink {
+  id        String           @id @default(cuid())
+  boardId   String
+  board     StrategyMapBoard @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  projectId String
+  goalId    String
+  strength  Int              @default(2)
+  createdAt DateTime         @default(now())
+
+  @@unique([boardId, projectId, goalId])
 }

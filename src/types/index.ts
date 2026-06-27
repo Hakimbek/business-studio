@@ -130,6 +130,23 @@ export interface StrategyMapIndicatorLink {
   strength: number;
 }
 
+export interface StrategyMapProjectEntry {
+  id: string;
+  x: number;
+  y: number;
+  boardId: string;
+  projectId: string;
+  project: Project;
+}
+
+export interface StrategyMapProjectLink {
+  id: string;
+  boardId: string;
+  projectId: string;
+  goalId: string;
+  strength: number;
+}
+
 export interface StrategyMapBoard {
   id: string;
   name: string;
@@ -139,6 +156,8 @@ export interface StrategyMapBoard {
   regions: StrategyMapRegion[];
   indicatorEntries: StrategyMapIndicatorEntry[];
   indicatorLinks: StrategyMapIndicatorLink[];
+  projectEntries: StrategyMapProjectEntry[];
+  projectLinks: StrategyMapProjectLink[];
   createdAt: string;
   updatedAt: string;
 }

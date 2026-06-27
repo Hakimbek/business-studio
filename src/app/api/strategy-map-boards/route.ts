@@ -22,6 +22,11 @@ export async function GET(req: NextRequest) {
         orderBy: { createdAt: "asc" },
       },
       indicatorLinks: { orderBy: { createdAt: "asc" } },
+      projectEntries: {
+        include: { project: true },
+        orderBy: { createdAt: "asc" },
+      },
+      projectLinks: { orderBy: { createdAt: "asc" } },
     },
     orderBy: { createdAt: "asc" },
   });
@@ -36,7 +41,7 @@ export async function POST(req: NextRequest) {
   if (!name) return NextResponse.json({ error: "Название обязательно" }, { status: 400 });
   const board = await prisma.strategyMapBoard.create({
     data: { name, companyId },
-    include: { entries: true, links: true, regions: true, indicatorEntries: true, indicatorLinks: true },
+    include: { entries: true, links: true, regions: true, indicatorEntries: true, indicatorLinks: true, projectEntries: true, projectLinks: true },
   });
   return NextResponse.json(board, { status: 201 });
 }

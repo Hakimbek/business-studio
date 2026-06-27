@@ -14,8 +14,9 @@ import { AddButton } from "@/components/shared/AddButton";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { cn, periodLabel } from "@/lib/utils";
 import type {
-  Goal, Indicator, StrategyMapBoard, StrategyMapEntry,
-  StrategyMapIndicatorEntry, StrategyMapRegion, StrategyMapIndicatorLink,
+  Goal, Indicator, Project, StrategyMapBoard, StrategyMapEntry,
+  StrategyMapIndicatorEntry, StrategyMapProjectEntry, StrategyMapRegion,
+  StrategyMapIndicatorLink,
 } from "@/types";
 
 // ── RAG status helpers ─────────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ const RAG: Record<NonNullable<RagStatus>, { border: string; bg: string; badge: s
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type DragKind = "goal" | "indicator" | "region" | "resize";
+type DragKind = "goal" | "indicator" | "project" | "region" | "resize";
 type DragState = {
   kind: DragKind;
   id: string;
@@ -66,11 +67,11 @@ type DragState = {
   startEX: number; startEY: number;
   startW?: number; startH?: number;
 };
-type ConnectSource = { kind: "goal" | "indicator"; id: string };
+type ConnectSource = { kind: "goal" | "indicator" | "project"; id: string };
 interface Arrow {
   id: string;
   x1: number; y1: number; x2: number; y2: number;
-  kind: "goal-goal" | "ind-goal";
+  kind: "goal-goal" | "ind-goal" | "proj-goal";
   sourceId: string;
   targetId: string;
   strength: number;
@@ -86,20 +87,22 @@ const REGION_COLORS = [
 // ── SVG Links overlay ─────────────────────────────────────────────────────────
 
 function LinksOverlay({
-  board, cardRefs, canvasRef, onDeleteLink, onUnlinkIndicator, onUpdateStrength, viewMode,
+  board, cardRefs, canvasRef, onDeleteLink, onUnlinkIndicator, onUnlinkProject, onUpdateStrength, viewMode,
 }: {
   board: StrategyMapBoard;
   cardRefs: React.RefObject<Map<string, HTMLElement>>;
   canvasRef: React.RefObject<HTMLDivElement | null>;
   onDeleteLink: (id: string) => void;
   onUnlinkIndicator: (indicatorId: string, goalId: string) => void;
+  onUnlinkProject: (projectId: string, goalId: string) => void;
   onUpdateStrength: (arrow: Arrow, strength: number) => void;
   viewMode: boolean;
 }) {
   const [arrows, setArrows] = useState<Arrow[]>([]);
   const [hovered, setHovered] = useState<string | null>(null);
-  const entryGoalIds = new Set(board.entries.map((e) => e.goalId));
-  const indEntryIds  = new Set(board.indicatorEntries.map((e) => e.indicatorId));
+  const entryGoalIds  = new Set(board.entries.map((e) => e.goalId));
+  const indEntryIds   = new Set(board.indicatorEntries.map((e) => e.indicatorId));
+  const projEntryIds  = new Set(board.projectEntries.map((e) => e.projectId));
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -125,6 +128,17 @@ function LinksOverlay({
       const sr = s.getBoundingClientRect();
       const tr = t.getBoundingClientRect();
       next.push({ id: il.id, sourceId: il.indicatorId, targetId: il.goalId, kind: "ind-goal", strength: il.strength ?? 2,
+        x1: sr.right - cr.left, y1: sr.top + sr.height / 2 - cr.top,
+        x2: tr.left - cr.left,  y2: tr.top + tr.height / 2 - cr.top });
+    }
+    for (const pl of board.projectLinks) {
+      if (!projEntryIds.has(pl.projectId) || !entryGoalIds.has(pl.goalId)) continue;
+      const s = cardRefs.current?.get(`proj-${pl.projectId}`);
+      const t = cardRefs.current?.get(pl.goalId);
+      if (!s || !t) continue;
+      const sr = s.getBoundingClientRect();
+      const tr = t.getBoundingClientRect();
+      next.push({ id: pl.id, sourceId: pl.projectId, targetId: pl.goalId, kind: "proj-goal", strength: pl.strength ?? 2,
         x1: sr.right - cr.left, y1: sr.top + sr.height / 2 - cr.top,
         x2: tr.left - cr.left,  y2: tr.top + tr.height / 2 - cr.top });
     }
@@ -155,7 +169,7 @@ function LinksOverlay({
       </defs>
       {arrows.map((a) => {
         const isH = !viewMode && hovered === a.id;
-        const color = a.kind === "ind-goal" ? "#0891b2" : "#6366f1";
+        const color = a.kind === "ind-goal" ? "#0891b2" : a.kind === "proj-goal" ? "#ea580c" : "#6366f1";
         const markerId = isH ? "arr-h" : a.kind === "ind-goal" ? "arr-ind" : "arr";
         const curve = Math.max(60, Math.abs(a.x2 - a.x1) * 0.45);
         const d = `M ${a.x1} ${a.y1} C ${a.x1 + curve} ${a.y1} ${a.x2 - curve} ${a.y2} ${a.x2} ${a.y2}`;
@@ -200,7 +214,7 @@ function LinksOverlay({
                 <line x1={48} y1={-8} x2={48} y2={8} stroke="#e5e7eb" strokeWidth={1} />
                 {/* Delete */}
                 <g transform="translate(60,0)" style={{ cursor: "pointer" }}
-                  onClick={() => a.kind === "goal-goal" ? onDeleteLink(a.id) : onUnlinkIndicator(a.sourceId, a.targetId)}>
+                  onClick={() => a.kind === "goal-goal" ? onDeleteLink(a.id) : a.kind === "proj-goal" ? onUnlinkProject(a.sourceId, a.targetId) : onUnlinkIndicator(a.sourceId, a.targetId)}>
                   <rect x={-12} y={-13} width={24} height={26} rx={5} fill="transparent" />
                   <line x1={-4} y1={-4} x2={4} y2={4} stroke="#ef4444" strokeWidth={1.8} strokeLinecap="round" />
                   <line x1={4} y1={-4} x2={-4} y2={4} stroke="#ef4444" strokeWidth={1.8} strokeLinecap="round" />
@@ -458,6 +472,82 @@ function IndicatorCard({
   );
 }
 
+// ── Project card ──────────────────────────────────────────────────────────────
+
+const PROJECT_STATUS_LABEL: Record<string, string> = {
+  ACTIVE: "Активный", ON_HOLD: "Приостановлен", COMPLETED: "Завершён", CANCELLED: "Отменён",
+};
+const PROJECT_STATUS_COLOR: Record<string, string> = {
+  ACTIVE: "#2563eb", ON_HOLD: "#ca8a04", COMPLETED: "#16a34a", CANCELLED: "#6b7280",
+};
+
+function ProjectCard({
+  entry, pos, connectMode, isSource, viewMode, cardRef, onMouseDown, onRemove, onConnect, onPortConnect,
+}: {
+  entry: StrategyMapProjectEntry;
+  pos: { x: number; y: number };
+  connectMode: boolean;
+  isSource: boolean;
+  viewMode: boolean;
+  cardRef: (el: HTMLElement | null) => void;
+  onMouseDown: (e: React.MouseEvent) => void;
+  onRemove: () => void;
+  onConnect: () => void;
+  onPortConnect: () => void;
+}) {
+  const proj = entry.project;
+  const statusColor = PROJECT_STATUS_COLOR[proj.status] ?? "#ea580c";
+
+  return (
+    <div
+      ref={cardRef}
+      className={cn(
+        "absolute group rounded-xl shadow-sm border border-gray-200 select-none overflow-visible transition-shadow",
+        viewMode ? "cursor-default hover:shadow-md" : connectMode ? "cursor-pointer hover:shadow-md" : "cursor-move hover:shadow-md",
+        isSource && "ring-2 ring-pulse",
+      )}
+      style={{ transform: `translate(${pos.x}px, ${pos.y}px)`, width: 170, zIndex: 10, borderLeft: `4px solid ${statusColor}`, background: "#fff", ["--tw-ring-color" as string]: statusColor }}
+      onMouseDown={viewMode ? undefined : connectMode ? undefined : onMouseDown}
+      onClick={!viewMode && connectMode ? onConnect : undefined}
+    >
+      <div className="p-3">
+        <p className="text-xs font-semibold text-gray-800 leading-snug">{proj.name}</p>
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: `${statusColor}18`, color: statusColor }}>
+            {PROJECT_STATUS_LABEL[proj.status] ?? proj.status}
+          </span>
+        </div>
+        {proj.deadline && (
+          <p className="mt-1 text-[10px] text-gray-400">
+            до {new Date(proj.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })}
+          </p>
+        )}
+      </div>
+
+      {!viewMode && (
+        <div
+          title="Соединить с целью"
+          className={cn(
+            "absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow cursor-pointer z-30 transition-opacity",
+            connectMode ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+            isSource && "scale-125",
+          )}
+          style={{ background: statusColor }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); onPortConnect(); }}
+        />
+      )}
+
+      {!viewMode && !connectMode && (
+        <button
+          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-white/90 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center cursor-pointer shadow-sm"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        ><X size={10} /></button>
+      )}
+    </div>
+  );
+}
+
 // ── Add region dialog ─────────────────────────────────────────────────────────
 
 function AddRegionDialog({ open, onClose, onAdd }: {
@@ -501,10 +591,11 @@ function AddRegionDialog({ open, onClose, onAdd }: {
 
 // ── BoardView ─────────────────────────────────────────────────────────────────
 
-function BoardView({ board, allGoals, allIndicators }: {
+function BoardView({ board, allGoals, allIndicators, allProjects }: {
   board: StrategyMapBoard;
   allGoals: Goal[];
   allIndicators: Indicator[];
+  allProjects: Project[];
 }) {
   const qc = useQueryClient();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -555,6 +646,13 @@ function BoardView({ board, allGoals, allIndicators }: {
   const updateLinkStrengthMut  = useMutation({ mutationFn: ({ linkId, strength }: { linkId: string; strength: number }) => fetch(`/api/strategy-map-boards/${board.id}/links`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkId, strength }) }), onSuccess: inv });
   const updateIndStrengthMut   = useMutation({ mutationFn: ({ indicatorId, goalId, strength }: { indicatorId: string; goalId: string; strength: number }) => fetch(`/api/strategy-map-boards/${board.id}/indicator-links`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ indicatorId, goalId, strength }) }), onSuccess: inv });
 
+  const addProjMut        = useMutation({ mutationFn: ({ projectId, x, y }: { projectId: string; x: number; y: number }) => fetch(`/api/strategy-map-boards/${board.id}/project-entries`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, x, y }) }).then(r => r.json()), onSuccess: inv });
+  const removeProjMut     = useMutation({ mutationFn: (projectId: string) => fetch(`/api/strategy-map-boards/${board.id}/project-entries`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }) }), onSuccess: inv });
+  const moveProjMut       = useMutation({ mutationFn: ({ projectId, x, y }: { projectId: string; x: number; y: number }) => fetch(`/api/strategy-map-boards/${board.id}/project-entries`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, x, y }) }), onSuccess: inv });
+  const addProjLinkMut    = useMutation({ mutationFn: ({ projectId, goalId }: { projectId: string; goalId: string }) => fetch(`/api/strategy-map-boards/${board.id}/project-links`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, goalId }) }).then(r => r.json()), onSuccess: inv });
+  const deleteProjLinkMut = useMutation({ mutationFn: ({ projectId, goalId }: { projectId: string; goalId: string }) => fetch(`/api/strategy-map-boards/${board.id}/project-links`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, goalId }) }), onSuccess: inv });
+  const updateProjStrengthMut = useMutation({ mutationFn: ({ projectId, goalId, strength }: { projectId: string; goalId: string; strength: number }) => fetch(`/api/strategy-map-boards/${board.id}/project-links`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, goalId, strength }) }), onSuccess: inv });
+
   // ── Ref-based drag ─────────────────────────────────────────────────────────
 
   function startDrag(e: React.MouseEvent, state: DragState, el: HTMLElement | null) {
@@ -603,6 +701,10 @@ function BoardView({ board, allGoals, allIndicators }: {
       const { x, y } = finalDragPos.current;
       setLocalPos(p => ({ ...p, [`ind-${drag.id}`]: { x, y } }));
       moveIndMut.mutate({ indicatorId: drag.id, x, y });
+    } else if (drag.kind === "project" && finalDragPos.current) {
+      const { x, y } = finalDragPos.current;
+      setLocalPos(p => ({ ...p, [`proj-${drag.id}`]: { x, y } }));
+      moveProjMut.mutate({ projectId: drag.id, x, y });
     } else if (drag.kind === "region" && finalDragPos.current) {
       const { x, y } = finalDragPos.current;
       setLocalPos(p => ({ ...p, [drag.id]: { x, y } }));
@@ -634,11 +736,12 @@ function BoardView({ board, allGoals, allIndicators }: {
     const y = e.clientY - rect.top  + wrapperRef.current.scrollTop;
     if (kind === "goal")           addGoalMut.mutate({ goalId: id, x, y });
     else if (kind === "indicator") addIndMut.mutate({ indicatorId: id, x, y });
+    else if (kind === "project")   addProjMut.mutate({ projectId: id, x, y });
   }
 
   // ── Connect ────────────────────────────────────────────────────────────────
 
-  function handleConnect(kind: "goal" | "indicator", id: string) {
+  function handleConnect(kind: "goal" | "indicator" | "project", id: string) {
     if (!connecting) { setConnecting({ kind, id }); return; }
     if (connecting.id === id && connecting.kind === kind) { setConnecting(null); return; }
     if (connecting.kind === "goal" && kind === "goal")
@@ -647,10 +750,14 @@ function BoardView({ board, allGoals, allIndicators }: {
       addIndLinkMut.mutate({ indicatorId: connecting.id, goalId: id });
     else if (connecting.kind === "goal" && kind === "indicator")
       addIndLinkMut.mutate({ indicatorId: id, goalId: connecting.id });
+    else if (connecting.kind === "project" && kind === "goal")
+      addProjLinkMut.mutate({ projectId: connecting.id, goalId: id });
+    else if (connecting.kind === "goal" && kind === "project")
+      addProjLinkMut.mutate({ projectId: id, goalId: connecting.id });
     setConnecting(null);
   }
 
-  function handlePortConnect(kind: "goal" | "indicator", id: string) {
+  function handlePortConnect(kind: "goal" | "indicator" | "project", id: string) {
     if (!connectMode) setConnectMode(true);
     handleConnect(kind, id);
   }
@@ -674,9 +781,11 @@ function BoardView({ board, allGoals, allIndicators }: {
 
   const assignedGoalIds = new Set(board.entries.map(e => e.goalId));
   const assignedIndIds  = new Set(board.indicatorEntries.map(e => e.indicatorId));
+  const assignedProjIds = new Set(board.projectEntries.map(e => e.projectId));
   const poolGoals = allGoals.filter(g => !assignedGoalIds.has(g.id));
   const poolInds  = allIndicators.filter(i => !assignedIndIds.has(i.id));
-  const isEmpty   = board.regions.length === 0 && board.entries.length === 0 && board.indicatorEntries.length === 0;
+  const poolProjs = allProjects.filter(p => !assignedProjIds.has(p.id));
+  const isEmpty   = board.regions.length === 0 && board.entries.length === 0 && board.indicatorEntries.length === 0 && board.projectEntries.length === 0;
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -713,6 +822,22 @@ function BoardView({ board, allGoals, allIndicators }: {
                       onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("kind", "indicator"); e.dataTransfer.setData("id", ind.id); }}
                       className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 cursor-move hover:border-cyan-400 hover:text-cyan-700 hover:shadow-sm transition-all select-none">
                       {ind.name}
+                    </div>
+                  ))}</div>
+              }
+            </div>
+
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                Проекты {poolProjs.length > 0 && `(${poolProjs.length})`}
+              </p>
+              {poolProjs.length === 0
+                ? <p className="text-[11px] text-gray-400 italic">Все проекты на карте</p>
+                : <div className="space-y-1">{poolProjs.map(proj => (
+                    <div key={proj.id} draggable
+                      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("kind", "project"); e.dataTransfer.setData("id", proj.id); }}
+                      className="bg-white border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700 cursor-move hover:border-orange-400 hover:text-orange-700 hover:shadow-sm transition-all select-none">
+                      {proj.name}
                     </div>
                   ))}</div>
               }
@@ -873,11 +998,31 @@ function BoardView({ board, allGoals, allIndicators }: {
               );
             })}
 
+            {/* Project cards */}
+            {board.projectEntries.map((pe) => {
+              const lp  = localPos[`proj-${pe.projectId}`];
+              const pos = { x: lp?.x ?? pe.x, y: lp?.y ?? pe.y };
+              return (
+                <ProjectCard key={pe.id} entry={pe} pos={pos} viewMode={viewMode}
+                  connectMode={connectMode}
+                  isSource={connecting?.id === pe.projectId && connecting?.kind === "project"}
+                  cardRef={(el) => { if (el) cardRefs.current.set(`proj-${pe.projectId}`, el); else cardRefs.current.delete(`proj-${pe.projectId}`); }}
+                  onMouseDown={(e) => startDrag(e,
+                    { kind: "project", id: pe.projectId, startCX: e.clientX, startCY: e.clientY, startEX: pos.x, startEY: pos.y },
+                    cardRefs.current.get(`proj-${pe.projectId}`) ?? null)}
+                  onRemove={() => removeProjMut.mutate(pe.projectId)}
+                  onConnect={() => handleConnect("project", pe.projectId)}
+                  onPortConnect={() => handlePortConnect("project", pe.projectId)} />
+              );
+            })}
+
             <LinksOverlay board={board} cardRefs={cardRefs} canvasRef={canvasRef} viewMode={viewMode}
               onDeleteLink={(id) => deleteLinkMut.mutate(id)}
               onUnlinkIndicator={(indicatorId, goalId) => deleteIndLinkMut.mutate({ indicatorId, goalId })}
+              onUnlinkProject={(projectId, goalId) => deleteProjLinkMut.mutate({ projectId, goalId })}
               onUpdateStrength={(arrow, strength) => {
                 if (arrow.kind === "goal-goal") updateLinkStrengthMut.mutate({ linkId: arrow.id, strength });
+                else if (arrow.kind === "proj-goal") updateProjStrengthMut.mutate({ projectId: arrow.sourceId, goalId: arrow.targetId, strength });
                 else updateIndStrengthMut.mutate({ indicatorId: arrow.sourceId, goalId: arrow.targetId, strength });
               }} />
           </div>
@@ -918,6 +1063,11 @@ export default function StrategyMapPage() {
   const { data: allIndicators = [] } = useQuery<Indicator[]>({
     queryKey: ["indicators"],
     queryFn: () => fetch("/api/indicators").then(r => r.json()),
+  });
+
+  const { data: allProjects = [] } = useQuery<Project[]>({
+    queryKey: ["projects"],
+    queryFn: () => fetch("/api/projects").then(r => r.json()),
   });
 
   const createMut = useMutation({
@@ -1008,7 +1158,7 @@ export default function StrategyMapPage() {
       )}
 
       {activeBoard && (
-        <BoardView key={activeBoard.id} board={activeBoard} allGoals={allGoals} allIndicators={allIndicators} />
+        <BoardView key={activeBoard.id} board={activeBoard} allGoals={allGoals} allIndicators={allIndicators} allProjects={allProjects} />
       )}
 
       <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)}
