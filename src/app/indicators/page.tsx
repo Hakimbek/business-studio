@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, PlusCircle, Trash2, X, Search, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -158,6 +159,7 @@ const empty: FormState = { name: "", description: "", unit: "", targetValue: "",
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function IndicatorsPage() {
+  const router = useRouter();
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -165,7 +167,6 @@ export default function IndicatorsPage() {
   const [form, setForm] = useState<FormState>(empty);
   const [search, setSearch] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
-  const [detailIndicator, setDetailIndicator] = useState<Indicator | null>(null);
 
   const { data: indicators = [], isLoading } = useQuery<Indicator[]>({
     queryKey: ["indicators"],
@@ -292,7 +293,7 @@ export default function IndicatorsPage() {
                   return (
                     <tr key={ind.id}
                       className="hover:bg-blue-50 transition-colors cursor-pointer"
-                      onClick={() => setDetailIndicator(ind)}>
+                      onClick={() => router.push(`/indicators/${ind.id}`)}>
                       <td className="px-3 py-2.5 text-xs text-gray-400 text-center">{idx + 1}</td>
                       <td className="px-3 py-2.5">
                         <div className="font-medium text-gray-900 text-sm">{ind.name}</div>
@@ -388,40 +389,6 @@ export default function IndicatorsPage() {
 
       <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)}
         onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} loading={deleteMutation.isPending} />
-
-      <Dialog open={!!detailIndicator} onOpenChange={(open) => { if (!open) setDetailIndicator(null); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{detailIndicator?.name}</DialogTitle>
-            {detailIndicator?.goal && (
-              <p className="text-sm text-gray-500 mt-0.5">{detailIndicator.goal.name}</p>
-            )}
-          </DialogHeader>
-          <div className="grid grid-cols-3 gap-3 py-2 border-b border-gray-100">
-            <div>
-              <p className="text-xs text-gray-400 mb-0.5">Цель</p>
-              <p className="text-sm font-medium text-gray-800">
-                {detailIndicator?.targetValue != null
-                  ? `${detailIndicator.targetValue}${detailIndicator.unit ? ` ${detailIndicator.unit}` : ""}`
-                  : "—"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-0.5">Ответственный</p>
-              <p className="text-sm font-medium text-gray-800">{detailIndicator?.owner?.name ?? "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-gray-400 mb-0.5">Дедлайн</p>
-              <p className="text-sm font-medium text-gray-800">
-                {detailIndicator?.deadline
-                  ? new Date(detailIndicator.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" })
-                  : "—"}
-              </p>
-            </div>
-          </div>
-          {detailIndicator && <PeriodSection indicator={detailIndicator} />}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
