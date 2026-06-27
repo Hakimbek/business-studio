@@ -588,6 +588,8 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
   const [addRegionOpen, setAddRegionOpen] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
   const [panelCollapsed, setPanelCollapsed] = useState<Record<string, boolean>>({});
+  const [goalSearch, setGoalSearch] = useState("");
+  const [goalSortDir, setGoalSortDir] = useState<"asc" | "desc" | null>(null);
 
   const allPeriods = useMemo(() => {
     const seen = new Set<string>();
@@ -757,6 +759,12 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
   const poolGoals = allGoals.filter(g => !assignedGoalIds.has(g.id));
   const poolInds  = allIndicators.filter(i => !assignedIndIds.has(i.id));
   const poolProjs = allProjects.filter(p => !assignedProjIds.has(p.id));
+
+  const visiblePoolGoals = useMemo(() => {
+    let list = poolGoals.filter(g => g.name.toLowerCase().includes(goalSearch.toLowerCase()));
+    if (goalSortDir) list = [...list].sort((a, b) => goalSortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
+    return list;
+  }, [poolGoals, goalSearch, goalSortDir]);
   const isEmpty   = board.regions.length === 0 && board.entries.length === 0 && board.indicatorEntries.length === 0 && board.projectEntries.length === 0;
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -768,11 +776,60 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
         <div className="w-56 shrink-0 border-r border-gray-100 bg-gray-50 flex flex-col overflow-y-auto">
           <div className="p-3 space-y-1">
 
-            {/* Goals section */}
+            {/* Goals section — with search + sort */}
+            <div className="rounded-lg overflow-hidden border border-gray-100">
+              <button
+                onClick={() => setPanelCollapsed(p => ({ ...p, goals: !p.goals }))}
+                className="w-full flex items-center gap-1.5 px-2.5 py-2 bg-gray-100 hover:bg-gray-200 transition-colors cursor-pointer"
+              >
+                <ChevronRight size={12} className={cn("text-gray-400 transition-transform shrink-0", !panelCollapsed.goals && "rotate-90")} />
+                <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide flex-1 text-left">Цели</span>
+                {poolGoals.length > 0 && (
+                  <span className="text-[10px] font-medium text-gray-400 bg-white rounded-full px-1.5 py-0.5 leading-none">{poolGoals.length}</span>
+                )}
+              </button>
+              {!panelCollapsed.goals && (
+                <div className="p-1.5 space-y-1">
+                  {poolGoals.length > 0 && (
+                    <div className="flex items-center gap-1 mb-1">
+                      <div className="relative flex-1">
+                        <input
+                          value={goalSearch}
+                          onChange={e => setGoalSearch(e.target.value)}
+                          placeholder="Поиск..."
+                          className="w-full pl-2 pr-2 h-6 text-[11px] border border-gray-200 rounded bg-white outline-none focus:border-blue-400 transition-colors"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setGoalSortDir(d => d === "asc" ? "desc" : d === "desc" ? null : "asc")}
+                        className={cn("h-6 px-1.5 rounded border text-[10px] font-medium transition-colors cursor-pointer shrink-0",
+                          goalSortDir ? "border-blue-400 text-blue-600 bg-blue-50" : "border-gray-200 text-gray-400 bg-white hover:border-gray-400")}
+                        title="Сортировка А→Я / Я→А"
+                      >
+                        {goalSortDir === "asc" ? "А→Я" : goalSortDir === "desc" ? "Я→А" : "А→Я"}
+                      </button>
+                    </div>
+                  )}
+                  {poolGoals.length === 0
+                    ? <p className="text-[11px] text-gray-400 italic px-1 py-0.5">Все на карте</p>
+                    : visiblePoolGoals.length === 0
+                      ? <p className="text-[11px] text-gray-400 italic px-1 py-0.5">Не найдено</p>
+                      : visiblePoolGoals.map(g => (
+                          <div key={g.id} draggable
+                            onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("kind", "goal"); e.dataTransfer.setData("id", g.id); }}
+                            className="bg-white border border-gray-200 rounded-md px-2 py-1.5 text-xs font-medium text-gray-700 cursor-move hover:border-indigo-400 hover:text-indigo-700 hover:shadow-sm transition-all select-none">
+                            {g.name}
+                          </div>
+                        ))
+                  }
+                </div>
+              )}
+            </div>
+
+            {/* Indicators + Projects sections */}
             {[
-              { key: "goals", label: "Цели", pool: poolGoals, hoverCls: "hover:border-indigo-400 hover:text-indigo-700", kind: "goal" as const },
-              { key: "inds",  label: "Показатели", pool: poolInds, hoverCls: "hover:border-cyan-400 hover:text-cyan-700",   kind: "indicator" as const },
-              { key: "projs", label: "Проекты", pool: poolProjs, hoverCls: "hover:border-orange-400 hover:text-orange-700", kind: "project" as const },
+              { key: "inds",  label: "Показатели", pool: poolInds,  hoverCls: "hover:border-cyan-400 hover:text-cyan-700",   kind: "indicator" as const },
+              { key: "projs", label: "Проекты",     pool: poolProjs, hoverCls: "hover:border-orange-400 hover:text-orange-700", kind: "project" as const },
             ].map(({ key, label, pool, hoverCls, kind }) => (
               <div key={key} className="rounded-lg overflow-hidden border border-gray-100">
                 <button
