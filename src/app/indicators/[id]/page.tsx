@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, PlusCircle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -34,9 +35,9 @@ export default function IndicatorDetailPage() {
   const router = useRouter();
   const qc = useQueryClient();
 
+  const [adding, setAdding] = useState(false);
   const [period, setPeriod] = useState(currentPeriod());
   const [value, setValue] = useState("");
-  const [adding, setAdding] = useState(false);
 
   const { data: indicator, isLoading } = useQuery<Indicator>({
     queryKey: ["indicator", id],
@@ -120,45 +121,15 @@ export default function IndicatorDetailPage() {
         <div className="bg-white rounded-xl border border-gray-200">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <h2 className="text-sm font-semibold text-gray-700">История фактических значений</h2>
-            {!adding && (
-              <button
-                onClick={() => setAdding(true)}
-                className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
-              >
-                <PlusCircle size={14} /> Добавить
-              </button>
-            )}
+            <button
+              onClick={() => { setPeriod(currentPeriod()); setValue(""); setAdding(true); }}
+              className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 cursor-pointer"
+            >
+              <PlusCircle size={14} /> Добавить
+            </button>
           </div>
 
-          {adding && (
-            <div className="px-4 py-3 border-b border-gray-100 bg-blue-50/50">
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                  <Label className="text-xs mb-1 block">Период</Label>
-                  <Select value={period} onValueChange={(v) => setPeriod(v ?? currentPeriod())}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {months.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="text-xs mb-1 block">Факт{indicator.unit ? ` (${indicator.unit})` : ""}</Label>
-                  <Input type="number" value={value} onChange={(e) => setValue(e.target.value)} placeholder="0" className="h-8 text-xs" autoFocus />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setAdding(false)}>Отмена</Button>
-                <Button size="sm" className="h-7 text-xs"
-                  onClick={() => addMut.mutate({ indicatorId: id, period, value: Number(value), note: "" })}
-                  disabled={!value || addMut.isPending}>
-                  {addMut.isPending ? "Сохранение..." : "Сохранить"}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {values.length === 0 && !adding && (
+          {values.length === 0 && (
             <p className="px-4 py-6 text-sm text-center text-gray-400">Данных пока нет. Нажмите «Добавить» чтобы внести первое значение.</p>
           )}
 
@@ -170,7 +141,6 @@ export default function IndicatorDetailPage() {
                   <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Факт</th>
                   <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Цель</th>
                   <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">%</th>
-                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Примечание</th>
                   <th className="w-8" />
                 </tr>
               </thead>
@@ -184,7 +154,6 @@ export default function IndicatorDetailPage() {
                       <td className="px-4 py-2.5 text-right font-semibold text-gray-900">{v.value}{indicator.unit ? ` ${indicator.unit}` : ""}</td>
                       <td className="px-4 py-2.5 text-right text-gray-400">{indicator.targetValue ?? "—"}{indicator.unit ? ` ${indicator.unit}` : ""}</td>
                       <td className={`px-4 py-2.5 text-right font-bold ${pc}`}>{p != null ? `${p}%` : "—"}</td>
-                      <td className="px-4 py-2.5 text-gray-500 text-sm">{v.note ?? ""}</td>
                       <td className="px-2 py-2.5 text-right">
                         <button onClick={() => deleteMut.mutate(v.id)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity cursor-pointer">
                           <X size={13} />
@@ -198,6 +167,39 @@ export default function IndicatorDetailPage() {
           )}
         </div>
       </div>
+
+      <Dialog open={adding} onOpenChange={(open) => { if (!open) setAdding(false); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Добавить факт</DialogTitle>
+            <p className="text-sm text-gray-500 mt-0.5">{indicator.name}</p>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label>Период</Label>
+              <Select value={period} onValueChange={(v) => setPeriod(v ?? currentPeriod())}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {months.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Фактическое значение{indicator.unit ? ` (${indicator.unit})` : ""}</Label>
+              <Input type="number" value={value} onChange={(e) => setValue(e.target.value)} placeholder="0" autoFocus />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAdding(false)}>Отмена</Button>
+            <Button
+              onClick={() => addMut.mutate({ indicatorId: id, period, value: Number(value), note: "" })}
+              disabled={!value || addMut.isPending}
+            >
+              {addMut.isPending ? "Сохранение..." : "Сохранить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
