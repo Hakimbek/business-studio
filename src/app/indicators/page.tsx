@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Pencil, PlusCircle, Trash2, X, Search, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ChevronRight, Pencil, PlusCircle, Trash2, X, Search, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddButton } from "@/components/shared/AddButton";
 import { Badge } from "@/components/ui/badge";
@@ -165,7 +165,11 @@ export default function IndicatorsPage() {
   const [form, setForm] = useState<FormState>(empty);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [addValueFor, setAddValueFor] = useState<Indicator | null>(null);
+  const [modalPeriod, setModalPeriod] = useState(currentPeriod());
+  const [modalValue, setModalValue] = useState("");
+  const [modalNote, setModalNote] = useState("");
 
   const { data: indicators = [], isLoading } = useQuery<Indicator[]>({
     queryKey: ["indicators"],
@@ -194,6 +198,19 @@ export default function IndicatorsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["indicators"] }); setDeleteId(null); },
   });
 
+  const addValueMutation = useMutation({
+    mutationFn: (d: { indicatorId: string; period: string; value: number; note: string }) =>
+      fetch("/api/indicator-values", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(d) }).then((r) => r.json()),
+    onSuccess: () => {
+      if (addValueFor) {
+        qc.invalidateQueries({ queryKey: ["indicator-values", addValueFor.id] });
+        qc.invalidateQueries({ queryKey: ["indicators"] });
+      }
+      setAddValueFor(null);
+      setModalValue(""); setModalNote("");
+    },
+  });
+
   function openCreate() { setEditItem(null); setForm(empty); setDialogOpen(true); }
   function openEdit(item: Indicator) {
     setEditItem(item);
@@ -209,17 +226,14 @@ export default function IndicatorsPage() {
   const loading = createMutation.isPending || updateMutation.isPending;
 
   const visibleIndicators = useMemo(() => {
-    let list = indicators.filter((ind) =>
+    const list = indicators.filter((ind) =>
       ind.name.toLowerCase().includes(search.toLowerCase())
     );
-    if (sortDir) {
-      list = [...list].sort((a, b) => {
-        const da = a.deadline ? new Date(a.deadline).getTime() : (sortDir === "asc" ? Infinity : -Infinity);
-        const db = b.deadline ? new Date(b.deadline).getTime() : (sortDir === "asc" ? Infinity : -Infinity);
-        return sortDir === "asc" ? da - db : db - da;
-      });
-    }
-    return list;
+    return [...list].sort((a, b) => {
+      const da = new Date(a.createdAt).getTime();
+      const db = new Date(b.createdAt).getTime();
+      return sortDir === "asc" ? da - db : db - da;
+    });
   }, [indicators, search, sortDir]);
 
   return (
@@ -241,14 +255,23 @@ export default function IndicatorsPage() {
         )}
 
         {indicators.length > 0 && (
-          <div className="mb-3 relative max-w-xs">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Поиск по названию..."
-              className="w-full pl-8 pr-3 h-8 text-sm border border-gray-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors"
-            />
+          <div className="mb-3 flex items-center gap-2">
+            <div className="relative max-w-xs flex-1">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Поиск по названию..."
+                className="w-full pl-8 pr-3 h-8 text-sm border border-gray-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-colors"
+              />
+            </div>
+            <button
+              onClick={() => setSortDir((d) => d === "desc" ? "asc" : "desc")}
+              className="flex items-center gap-1.5 h-8 px-3 text-xs border border-gray-200 rounded-lg bg-white text-gray-600 hover:border-blue-400 hover:text-blue-600 transition-colors cursor-pointer whitespace-nowrap"
+            >
+              {sortDir === "desc" ? <ArrowDown size={13} /> : <ArrowUp size={13} />}
+              {sortDir === "desc" ? "Сначала новые" : "Сначала старые"}
+            </button>
           </div>
         )}
 
@@ -263,15 +286,7 @@ export default function IndicatorsPage() {
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Факт</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">%</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ответственный</th>
-                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    <button
-                      onClick={() => setSortDir((d) => d === "asc" ? "desc" : d === "desc" ? null : "asc")}
-                      className="flex items-center gap-1 hover:text-gray-800 transition-colors cursor-pointer"
-                    >
-                      Дедлайн
-                      {sortDir === "asc" ? <ArrowUp size={11} className="text-blue-500" /> : sortDir === "desc" ? <ArrowDown size={11} className="text-blue-500" /> : <ArrowUpDown size={11} className="text-gray-300" />}
-                    </button>
-                  </th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Дедлайн</th>
                   <th className="w-16" />
                 </tr>
               </thead>
@@ -328,9 +343,18 @@ export default function IndicatorsPage() {
                             : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-2 py-2.5">
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit(ind)}><Pencil size={12} /></Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-600" onClick={() => setDeleteId(ind.id)}><Trash2 size={12} /></Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                              title="Добавить факт"
+                              onClick={() => { setAddValueFor(ind); setModalPeriod(currentPeriod()); setModalValue(""); setModalNote(""); }}
+                            >
+                              <PlusCircle size={14} />
+                            </Button>
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit(ind)}><Pencil size={12} /></Button>
+                              <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-600" onClick={() => setDeleteId(ind.id)}><Trash2 size={12} /></Button>
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -404,6 +428,46 @@ export default function IndicatorsPage() {
 
       <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)}
         onConfirm={() => deleteId && deleteMutation.mutate(deleteId)} loading={deleteMutation.isPending} />
+
+      <Dialog open={!!addValueFor} onOpenChange={(open) => { if (!open) setAddValueFor(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Добавить факт</DialogTitle>
+            {addValueFor && <p className="text-sm text-gray-500 mt-0.5">{addValueFor.name}</p>}
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label>Период</Label>
+              <Select value={modalPeriod} onValueChange={(v) => setModalPeriod(v ?? currentPeriod())}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {monthOptions().map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Фактическое значение{addValueFor?.unit ? ` (${addValueFor.unit})` : ""}</Label>
+              <Input
+                type="number" value={modalValue} onChange={(e) => setModalValue(e.target.value)}
+                placeholder="0" autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Примечание <span className="text-gray-400 font-normal">(необязательно)</span></Label>
+              <Input value={modalNote} onChange={(e) => setModalNote(e.target.value)} placeholder="..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddValueFor(null)}>Отмена</Button>
+            <Button
+              onClick={() => addValueFor && addValueMutation.mutate({ indicatorId: addValueFor.id, period: modalPeriod, value: Number(modalValue), note: modalNote })}
+              disabled={!modalValue || addValueMutation.isPending}
+            >
+              {addValueMutation.isPending ? "Сохранение..." : "Сохранить"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
