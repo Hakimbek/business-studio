@@ -309,7 +309,7 @@ export default function IndicatorsPage() {
                   return (
                     <>
                       <tr key={ind.id}
-                        className={cn("group hover:bg-gray-50 transition-colors", isExpanded && "bg-blue-50 hover:bg-blue-50")}>
+                        className={cn("hover:bg-gray-50 transition-colors", isExpanded && "bg-blue-50 hover:bg-blue-50")}>
                         <td className="pl-3">
                           <button
                             onClick={() => setExpandedId(isExpanded ? null : ind.id)}
@@ -345,16 +345,14 @@ export default function IndicatorsPage() {
                         <td className="px-2 py-2.5">
                           <div className="flex items-center gap-1">
                             <Button
-                              variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                              variant="ghost" size="icon" className="h-6 w-6 text-blue-500 hover:text-blue-700 hover:bg-blue-50 cursor-pointer"
                               title="Добавить факт"
                               onClick={() => { setAddValueFor(ind); setModalPeriod(currentPeriod()); setModalValue(""); setModalNote(""); }}
                             >
                               <PlusCircle size={14} />
                             </Button>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => openEdit(ind)}><Pencil size={12} /></Button>
-                              <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-600" onClick={() => setDeleteId(ind.id)}><Trash2 size={12} /></Button>
-                            </div>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-gray-400 hover:text-gray-700 cursor-pointer" onClick={() => openEdit(ind)}><Pencil size={12} /></Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-600 cursor-pointer" onClick={() => setDeleteId(ind.id)}><Trash2 size={12} /></Button>
                           </div>
                         </td>
                       </tr>
