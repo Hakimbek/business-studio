@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Building2, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Plus, Building2, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { useCompany, type Company } from "@/contexts/company";
 
 export function CompanySelect() {
@@ -12,6 +15,8 @@ export function CompanySelect() {
   const { selectCompany } = useCompany();
   const [name, setName] = useState("");
   const [error, setError] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
 
   const { data: companies = [], isLoading } = useQuery<Company[]>({
     queryKey: ["companies"],
@@ -35,9 +40,15 @@ export function CompanySelect() {
       qc.invalidateQueries({ queryKey: ["companies"] });
       setName("");
       setError("");
+      setDialogOpen(false);
       selectCompany(company);
     },
     onError: (err: Error) => setError(err.message),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => fetch(`/api/companies/${id}`, { method: "DELETE" }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["companies"] }); setDeleteId(null); },
   });
 
   function handleCreate() {
@@ -48,21 +59,73 @@ export function CompanySelect() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center mx-auto mb-4">
-            <Building2 size={24} className="text-white" />
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-8 py-5 border-b border-gray-200 bg-white">
+        {/* Logo left */}
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-sm">
+            <Building2 size={18} className="text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Business Studio</h1>
-          <p className="text-sm text-gray-500 mt-1">Выберите компанию для работы</p>
+          <span className="text-lg font-bold text-gray-900">Business Studio</span>
         </div>
 
-        {/* Create form */}
-        <div className="bg-white rounded-xl border border-gray-200 p-4 mb-4">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Новая компания</p>
-          <div className="flex items-center gap-2">
+        {/* Add button right */}
+        <button
+          onClick={() => setDialogOpen(true)}
+          className="flex items-center gap-2 h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-medium cursor-pointer hover:bg-blue-700 transition-colors"
+        >
+          <Plus size={15} strokeWidth={2.5} />
+          Новая компания
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 p-8">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Компании</p>
+
+        {isLoading && <p className="text-sm text-gray-400">Загрузка...</p>}
+
+        {!isLoading && companies.length === 0 && (
+          <div className="text-center py-24 text-gray-400">
+            <p className="text-sm">Компаний пока нет.</p>
+            <button onClick={() => setDialogOpen(true)} className="mt-3 text-sm text-blue-500 hover:underline cursor-pointer">Создать первую</button>
+          </div>
+        )}
+
+        {!isLoading && companies.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {companies.map((c) => (
+              <div key={c.id} className="relative group">
+                <button
+                  onClick={() => selectCompany(c)}
+                  className="w-full h-32 bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all duration-150 flex flex-col items-center justify-center gap-3 cursor-pointer"
+                >
+                  <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                    <Building2 size={20} className="text-blue-500" />
+                  </div>
+                  <span className="text-sm font-semibold text-gray-800 text-center px-3 leading-snug">{c.name}</span>
+                </button>
+                <button
+                  onClick={() => setDeleteId(c.id)}
+                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white shadow-sm border border-gray-100 text-gray-300 hover:text-red-500 hover:border-red-200 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                  title="Удалить компанию"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <Dialog open={dialogOpen} onOpenChange={(o) => { if (!o) { setName(""); setError(""); } setDialogOpen(o); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Новая компания</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5 py-2">
+            <Label>Название *</Label>
             <Input
               value={name}
               onChange={(e) => { setName(e.target.value); setError(""); }}
@@ -71,44 +134,23 @@ export function CompanySelect() {
               className={error ? "border-red-400 focus-visible:ring-red-300" : ""}
               autoFocus
             />
-            <button
-              onClick={handleCreate}
-              disabled={!name.trim() || createMut.isPending}
-              className="shrink-0 w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center cursor-pointer hover:bg-blue-700 active:scale-95 transition-all duration-150 disabled:opacity-40 disabled:pointer-events-none group"
-            >
-              <Plus size={16} strokeWidth={2.5} className="transition-transform duration-200 group-hover:rotate-90" />
-            </button>
+            {error && <p className="text-xs text-red-500">{error}</p>}
           </div>
-          {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
-        </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setDialogOpen(false); setName(""); setError(""); }}>Отмена</Button>
+            <Button onClick={handleCreate} disabled={!name.trim() || createMut.isPending}>
+              {createMut.isPending ? "Создание..." : "Создать"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-        {/* Existing companies */}
-        {isLoading && (
-          <p className="text-sm text-gray-400 text-center py-4">Загрузка...</p>
-        )}
-
-        {!isLoading && companies.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 pt-3 pb-2">
-              Существующие компании
-            </p>
-            {companies.map((c, i) => (
-              <button
-                key={c.id}
-                onClick={() => selectCompany(c)}
-                className={`w-full text-left px-4 py-3 flex items-center justify-between text-sm font-medium text-gray-800 hover:bg-blue-50 hover:text-blue-700 transition-colors group ${i > 0 ? "border-t border-gray-100" : ""}`}
-              >
-                <span>{c.name}</span>
-                <ChevronRight size={14} className="text-gray-300 group-hover:text-blue-400" />
-              </button>
-            ))}
-          </div>
-        )}
-
-        {!isLoading && companies.length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-2">Нет компаний — создайте первую выше.</p>
-        )}
-      </div>
+      <ConfirmDialog
+        open={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={() => deleteId && deleteMut.mutate(deleteId)}
+        loading={deleteMut.isPending}
+      />
     </div>
   );
 }

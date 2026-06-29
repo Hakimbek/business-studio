@@ -8,7 +8,15 @@ export async function GET(req: NextRequest) {
     where: { companyId },
     include: {
       entries: {
-        include: { goal: { include: { indicators: true } } },
+        include: {
+          goal: {
+            include: {
+              indicators: {
+                include: { values: { orderBy: { period: "desc" }, take: 1 } },
+              },
+            },
+          },
+        },
         orderBy: { createdAt: "asc" },
       },
       links: { orderBy: { createdAt: "asc" } },

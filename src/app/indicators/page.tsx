@@ -152,9 +152,9 @@ function PeriodSection({ indicator }: { indicator: Indicator }) {
 
 interface FormState {
   name: string; description: string; unit: string;
-  targetValue: string; deadline: string; ownerId: string;
+  targetValue: string; weight: string; deadline: string; ownerId: string;
 }
-const empty: FormState = { name: "", description: "", unit: "", targetValue: "", deadline: "", ownerId: "" };
+const empty: FormState = { name: "", description: "", unit: "", targetValue: "", weight: "", deadline: "", ownerId: "" };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -199,7 +199,7 @@ export default function IndicatorsPage() {
   function openCreate() { setEditItem(null); setForm(empty); setDialogOpen(true); }
   function openEdit(item: Indicator) {
     setEditItem(item);
-    setForm({ name: item.name, description: item.description ?? "", unit: item.unit ?? "", targetValue: item.targetValue?.toString() ?? "", deadline: item.deadline ? item.deadline.slice(0, 10) : "", ownerId: item.ownerId ?? "" });
+    setForm({ name: item.name, description: item.description ?? "", unit: item.unit ?? "", targetValue: item.targetValue?.toString() ?? "", weight: item.weight?.toString() ?? "", deadline: item.deadline ? item.deadline.slice(0, 10) : "", ownerId: item.ownerId ?? "" });
     setDialogOpen(true);
   }
   function closeDialog() { setDialogOpen(false); setEditItem(null); setForm(empty); }
@@ -270,6 +270,7 @@ export default function IndicatorsPage() {
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Цель (зн.)</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Факт</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">%</th>
+                  <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-16">Вес</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ответственный</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Дедлайн</th>
                   <th className="w-16" />
@@ -278,7 +279,7 @@ export default function IndicatorsPage() {
               <tbody className="divide-y divide-gray-100">
                 {visibleIndicators.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-3 py-6 text-sm text-center text-gray-400">Ничего не найдено</td>
+                    <td colSpan={9} className="px-3 py-6 text-sm text-center text-gray-400">Ничего не найдено</td>
                   </tr>
                 )}
                 {visibleIndicators.map((ind, idx) => {
@@ -311,6 +312,9 @@ export default function IndicatorsPage() {
                       </td>
                       <td className={cn("px-3 py-2.5 text-sm font-semibold", pctColor)}>
                         {pct != null ? `${pct}%` : <span className="text-gray-300 font-normal">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right text-sm font-medium text-gray-700">
+                        {ind.weight != null ? `${ind.weight}%` : <span className="text-gray-300 font-normal">—</span>}
                       </td>
                       <td className="px-3 py-2.5 text-sm text-gray-600">
                         {ind.owner?.name ?? <span className="text-gray-300">—</span>}
@@ -376,6 +380,10 @@ export default function IndicatorsPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Вес, %</Label>
+              <Input type="number" min={0} max={100} value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} placeholder="Введите вес в процентах" />
             </div>
           </div>
           <DialogFooter>

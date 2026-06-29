@@ -28,63 +28,46 @@ const COLORS = [
   "#0891b2", "#db2777", "#ca8a04", "#64748b",
 ];
 
-// ─── Strategy card ────────────────────────────────────────────────────────────
+// ─── Strategy row ─────────────────────────────────────────────────────────────
 
-function StrategyCard({ strategy, onEdit, onDelete }: { strategy: Strategy; onEdit: () => void; onDelete: () => void }) {
+function StrategyRow({ strategy, number, onEdit, onDelete }: { strategy: Strategy; number: number; onEdit: () => void; onDelete: () => void }) {
   const goalCount = strategy.goals.length;
   const totalTarget = strategy.goals.reduce((s, g) => s + g.indicators.reduce((a, i) => a + (i.targetValue ?? 0), 0), 0);
   const totalActual = strategy.goals.reduce((s, g) => s + g.indicators.reduce((a, i) => a + (i.actualValue ?? 0), 0), 0);
   const pct = totalTarget > 0 ? Math.round((totalActual / totalTarget) * 100) : null;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden group hover:shadow-sm transition-shadow">
-      <div className="h-1.5" style={{ background: strategy.color }} />
-      <div className="p-5">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full shrink-0" style={{ background: strategy.color }} />
-            <h3 className="font-semibold text-gray-900 text-sm">{strategy.name}</h3>
-          </div>
-          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onEdit}><Pencil size={12} /></Button>
-            <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-600" onClick={onDelete}><Trash2 size={12} /></Button>
+    <tr className="group hover:bg-gray-50 transition-colors">
+      <td className="px-4 py-3 text-xs font-medium text-gray-300 w-10">{number}</td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <span className="w-3 h-3 rounded-full shrink-0" style={{ background: strategy.color }} />
+          <div>
+            <p className="text-sm font-medium text-gray-800">{strategy.name}</p>
+            {strategy.description && <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{strategy.description}</p>}
           </div>
         </div>
-
-        {strategy.description && (
-          <p className="text-xs text-gray-500 mb-3 leading-relaxed">{strategy.description}</p>
+      </td>
+      <td className="px-4 py-3">
+        <span className="flex items-center gap-1 text-xs text-gray-500">
+          <Target size={11} />
+          {goalCount} {goalCount === 1 ? "цель" : goalCount < 5 ? "цели" : "целей"}
+        </span>
+      </td>
+      <td className="px-4 py-3 text-right">
+        {pct != null && (
+          <Badge className={`text-xs border-0 ${pct >= 100 ? "bg-green-100 text-green-700" : pct >= 70 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-600"}`}>
+            {pct}%
+          </Badge>
         )}
-
-        {/* Stats */}
-        <div className="flex items-center gap-3 mb-3">
-          <span className="flex items-center gap-1 text-xs text-gray-500">
-            <Target size={11} />
-            <span>{goalCount} {goalCount === 1 ? "цель" : goalCount < 5 ? "цели" : "целей"}</span>
-          </span>
-          {pct != null && (
-            <Badge className={`text-xs border-0 ${pct >= 100 ? "bg-green-100 text-green-700" : pct >= 70 ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-600"}`}>
-              {pct}%
-            </Badge>
-          )}
+      </td>
+      <td className="px-2 py-3">
+        <div className="flex items-center gap-0.5 justify-end">
+          <Button variant="ghost" size="icon" className="h-7 w-7 cursor-pointer" onClick={onEdit}><Pencil size={13} /></Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600 cursor-pointer" onClick={onDelete}><Trash2 size={13} /></Button>
         </div>
-
-        {/* Goals list */}
-        {goalCount > 0 && (
-          <div className="space-y-1.5">
-            {strategy.goals.map((goal) => (
-              <div key={goal.id} className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 rounded-lg px-2.5 py-1.5">
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: strategy.color }} />
-                <span className="flex-1 truncate">{goal.name}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {goalCount === 0 && (
-          <p className="text-xs text-gray-300 italic">Нет привязанных целей</p>
-        )}
-      </div>
-    </div>
+      </td>
+    </tr>
   );
 }
 
@@ -142,11 +125,6 @@ export default function StrategiesPage() {
 
       <div className="p-6">
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-gray-700">Стратегические направления</h2>
-            <span className="text-xs text-gray-400">{strategies.length} направлений</span>
-          </div>
-
           {isLoading && <p className="text-sm text-gray-400">Загрузка...</p>}
 
           {!isLoading && strategies.length === 0 && (
@@ -156,16 +134,32 @@ export default function StrategiesPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            {strategies.map((s) => (
-              <StrategyCard
-                key={s.id}
-                strategy={s}
-                onEdit={() => openEdit(s)}
-                onDelete={() => setDeleteId(s.id)}
-              />
-            ))}
-          </div>
+          {strategies.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50">
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-10">#</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Название</th>
+                    <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Цели</th>
+                    <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Выполнение</th>
+                    <th className="w-20" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {strategies.map((s, idx) => (
+                    <StrategyRow
+                      key={s.id}
+                      strategy={s}
+                      number={idx + 1}
+                      onEdit={() => openEdit(s)}
+                      onDelete={() => setDeleteId(s.id)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 

@@ -135,7 +135,7 @@ bs/
 │   ├── lib/
 │   │   ├── prisma.ts        # Singleton PrismaClient with LibSQL adapter
 │   │   ├── tree.ts          # Generic buildTree<T> for hierarchical data
-│   │   └── utils.ts         # cn(), MONTHS_RU, periodLabel()
+│   │   └── utils.ts         # cn(), MONTHS_RU, periodLabel(), indicatorPct(), goalPct(), boardPct()
 │   └── types/
 │       └── index.ts         # TypeScript interfaces matching Prisma models
 └── components.json          # shadcn/ui config
@@ -149,41 +149,51 @@ bs/
 Manage the company's strategic profile and strategic directions.
 
 - **Company card** — edit name, mission, vision, values, and strategic horizon
-- **Strategy cards** — color-coded strategic directions; each shows linked goals
+- **Strategies table** — numbered list of color-coded strategic directions; each row shows linked goal count and weighted completion %
 
 ### Goals (`/goals`)
 Build and manage the strategic goal tree.
 
-- Filter goals by strategy (pill bar at top)
+- **Table layout** with columns: #, Name, Strategy, Owner, Weight %, Completion %
+- Filter by strategy (pill bar at top); search by name; sort by date added (newest / oldest first)
 - Each goal has: name, description, weight %, strategy, and responsible person (Position)
+- **Completion %** is computed from linked indicators using weighted average (`goalPct`)
 - Full CRUD with confirmation on delete
 
 ### Indicators / KPIs (`/indicators`)
 Define and track KPIs.
 
-- Fields: name, unit, target value, deadline, responsible person
+- **Table layout** with columns: #, Name, Unit, Goal, Target, Actual, %, Weight %, Owner, Deadline
+- **Weight %** — each indicator has a weight used for weighted completion calculation
 - **Period history** — expand any indicator to add monthly fact values (last 12 months); table shows fact / target / % for each period with color coding
 - Goal-indicator connections are managed from the Strategy Map, not here
 
 ### Strategy Map (`/strategy-map`)
-Free-form canvas for visualizing strategic goals and indicators.
+Free-form canvas for visualizing strategic goals, indicators, and projects.
 
-- **Multiple boards** — create as many maps as needed (tab bar)
+#### Board index
+Opening `/strategy-map` shows an **index grid** of all boards as cards. Click any board to enter it; double-click the board name inside to rename it. Use the back button ("← Все карты") to return to the index.
+
+#### Inside a board
+- **Completion badge** — the board header shows the overall weighted completion % of all placed goals (green ≥ 100%, yellow ≥ 70%, red < 70%)
 - **Perspective regions** — draggable colored boxes with resizable borders; double-click header to rename
-- **Goal cards** — circular cards (140 px diameter, like Business Studio); drag from the left panel onto the canvas; freely repositioned
+- **Goal cards** — circular cards (140 px diameter); drag from the left panel onto the canvas; freely repositioned
 - **Indicator cards** — rectangular cards; drag from the left panel onto the canvas; show target value and mini progress bar
-- **RAG color coding** — cards are colored based on performance (latest period value ÷ target):
-  - 🟢 Green: ≥ 80%
-  - 🟡 Yellow: ≥ 50%
-  - 🔴 Red: < 50%
+- **Project cards** — diamond-shaped cards; drag from the left panel onto the canvas; show status badge
+- **RAG color coding** — cards colored by performance:
+  - Green ≥ 80%, Yellow ≥ 50%, Red < 50%
   - Goal card inherits the worst status of its linked indicators
-- **Connections** — hover a card to reveal a port circle on the right edge; click it to start a connection; click a target card or its port to complete it
+- **Connections** — hover a card to reveal a port circle; click to start a connection, click target to complete
   - Goal → Goal: directional link (indigo arrow)
-  - Indicator → Goal: many-to-many link (cyan arrow); one indicator can link to multiple goals
+  - Indicator → Goal: many-to-many link (cyan arrow)
+  - Project → Goal: link (purple arrow)
+  - **Optimal side routing** — each arrow connects on the best edge (left/right/top/bottom) based on relative card position
+  - **Automatic width** — stroke width is derived from the source card's weight (thin ≤ 33%, medium ≤ 66%, thick > 66%)
   - Hover any arrow to reveal a delete button
-- **Two modes** — toggled via segmented control in the toolbar (top-right of each board):
-  - **Edit mode** (default) — left panel shows all unplaced goals and indicators; drag to canvas; move cards; create/delete connections and regions
-  - **View mode** — left panel hidden; canvas is read-only; clean presentation view with only placed cards and connections visible
+- **Left panel sections** — Goals, Indicators, Projects; all collapsed by default; expand to drag items onto canvas
+- **Two modes** — toggled via segmented control in the toolbar:
+  - **Edit mode** (default) — drag cards; move cards; create/delete connections and regions
+  - **View mode** — canvas read-only; clean presentation view
 - All positions and connections are persisted to the database automatically
 
 ### Processes (`/processes`)
@@ -196,22 +206,22 @@ Manage the business process hierarchy.
 Two-tab view: org units tree and positions list.
 
 - **Units** — tree of Company → Division → Department → Group
-- **Positions** — flat list with org unit; positions are referenced throughout the app (goal owner, process owner, RACI, projects)
+- **Positions** — numbered table with org unit; positions are referenced throughout the app (goal owner, process owner, RACI, projects)
 
 ### Responsible (`/responsible`)
 Standalone page to manage Positions (job roles / responsible persons).
 
+- Numbered table with columns: #, Name, Org Unit
 - Create, edit, delete positions
 - Each position has a name, description, and optional org unit
-- Shows avatar initial and org unit label in the list
 
 ### Projects (`/projects`)
 Project register for the company.
 
-- Fields: name, description, status, deadline, responsible person
+- **Flat numbered table** with columns: #, Name, Status, Owner, Deadline
 - **Statuses**: Active / On Hold / Completed / Cancelled
-- Projects are grouped by status in the list
 - Overdue active projects highlight the deadline in red
+- Projects can also be placed on the Strategy Map canvas and linked to goals
 
 ### RACI Matrix (`/raci`)
 Responsibility assignment matrix across processes and positions.
@@ -258,7 +268,7 @@ All routes are under `/api`. Request and response bodies are JSON. Company conte
 ### Goals
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/goals` | List all goals with owner and indicators |
+| GET | `/api/goals` | List all goals with owner and indicators (including latest values) |
 | POST | `/api/goals` | Create (`name`, `description?`, `weight?`, `strategyId?`, `ownerId?`) |
 | PUT | `/api/goals/:id` | Update |
 | DELETE | `/api/goals/:id` | Delete |
@@ -267,8 +277,8 @@ All routes are under `/api`. Request and response bodies are JSON. Company conte
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/indicators` | List all indicators with goal, process, owner |
-| POST | `/api/indicators` | Create (`name`, `unit?`, `targetValue?`, `deadline?`, `ownerId?`) |
-| PUT | `/api/indicators/:id` | Full update |
+| POST | `/api/indicators` | Create (`name`, `unit?`, `targetValue?`, `deadline?`, `ownerId?`, `weight?`) |
+| PUT | `/api/indicators/:id` | Full update (includes `weight`) |
 | PATCH | `/api/indicators/:id` | Partial update (e.g. `goalId`) |
 | DELETE | `/api/indicators/:id` | Delete |
 
@@ -329,11 +339,11 @@ All routes are under `/api`. Request and response bodies are JSON. Company conte
 ### Strategy Map Boards
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/strategy-map-boards` | List all boards with entries, links, regions, indicatorEntries, indicatorLinks |
+| GET | `/api/strategy-map-boards` | List all boards with entries, links, regions, indicator entries/links, project entries/links |
 | POST | `/api/strategy-map-boards` | Create a board (`name`) |
 | PUT | `/api/strategy-map-boards/:id` | Rename a board |
 | DELETE | `/api/strategy-map-boards/:id` | Delete a board |
-| POST | `/api/strategy-map-boards/:id/entries` | Add or move a goal on the canvas (`goalId`, `x`, `y`) |
+| POST | `/api/strategy-map-boards/:id/entries` | Add a goal to the canvas (`goalId`, `x`, `y`) |
 | PATCH | `/api/strategy-map-boards/:id/entries` | Update goal position (`goalId`, `x`, `y`) |
 | DELETE | `/api/strategy-map-boards/:id/entries` | Remove a goal from the canvas (`goalId`) |
 | POST | `/api/strategy-map-boards/:id/links` | Create a goal→goal link (`sourceGoalId`, `targetGoalId`) |
@@ -346,6 +356,11 @@ All routes are under `/api`. Request and response bodies are JSON. Company conte
 | PATCH | `/api/strategy-map-boards/:id/indicator-entries/:indicatorId` | Update indicator position (`x`, `y`) |
 | POST | `/api/strategy-map-boards/:id/indicator-links` | Link an indicator to a goal (`indicatorId`, `goalId`) |
 | DELETE | `/api/strategy-map-boards/:id/indicator-links` | Unlink an indicator from a goal (`indicatorId`, `goalId`) |
+| POST | `/api/strategy-map-boards/:id/project-entries` | Add a project to the canvas (`projectId`, `x`, `y`) |
+| PATCH | `/api/strategy-map-boards/:id/project-entries` | Update project position (`projectId`, `x`, `y`) |
+| DELETE | `/api/strategy-map-boards/:id/project-entries` | Remove a project from the canvas (`projectId`) |
+| POST | `/api/strategy-map-boards/:id/project-links` | Link a project to a goal (`projectId`, `goalId`) |
+| DELETE | `/api/strategy-map-boards/:id/project-links` | Unlink a project from a goal (`projectId`, `goalId`) |
 
 ---
 
@@ -356,10 +371,10 @@ Company               — one per app session; stores name
 
 Strategy              — strategic directions (color-coded)
 
-Goal                  — flat list; linked to Strategy, owner Position
+Goal                  — flat list; linked to Strategy, owner Position; has weight %
   └── indicators: Indicator[]
 
-Indicator             — KPI; linked to Goal and/or Process; has owner Position
+Indicator             — KPI; linked to Goal and/or Process; has owner Position, weight %
   └── values: IndicatorValue[]   — monthly fact values ("YYYY-MM")
 
 IndicatorValue        — unique(indicatorId, period)
@@ -386,11 +401,13 @@ RaciItem              — unique(processId, positionId, raciType)
 Risk                  — probability 1–5, impact 1–5; optional Process link
 
 StrategyMapBoard      — one canvas per board
-  ├── entries: StrategyMapEntry[]            — goal cards (x, y)
-  ├── links: StrategyMapLink[]               — goal→goal directed edges
-  ├── regions: StrategyMapRegion[]           — perspective boxes (x, y, w, h, color)
-  ├── indicatorEntries: StrategyMapIndicatorEntry[]   — indicator cards (x, y)
-  └── indicatorLinks: StrategyMapIndicatorLink[]      — indicator→goal edges (many-to-many)
+  ├── entries: StrategyMapEntry[]                    — goal cards (x, y)
+  ├── links: StrategyMapLink[]                       — goal→goal directed edges
+  ├── regions: StrategyMapRegion[]                   — perspective boxes (x, y, w, h, color)
+  ├── indicatorEntries: StrategyMapIndicatorEntry[]  — indicator cards (x, y)
+  ├── indicatorLinks: StrategyMapIndicatorLink[]     — indicator→goal edges (many-to-many)
+  ├── projectEntries: StrategyMapProjectEntry[]      — project cards (x, y)
+  └── projectLinks: StrategyMapProjectLink[]         — project→goal edges (many-to-many)
 ```
 
 **Enums:**
@@ -401,6 +418,23 @@ StrategyMapBoard      — one canvas per board
 | `RaciType` | `RESPONSIBLE`, `ACCOUNTABLE`, `CONSULTED`, `INFORMED` |
 | `OrgUnitType` | `COMPANY`, `DIVISION`, `DEPARTMENT`, `GROUP` |
 | `ProjectStatus` | `ACTIVE`, `ON_HOLD`, `COMPLETED`, `CANCELLED` |
+
+---
+
+## Completion Calculation
+
+Weighted completion is computed in `src/lib/utils.ts` and used on the Goals page and Strategy Map header.
+
+| Function | Input | Logic |
+|---|---|---|
+| `indicatorPct(ind)` | single Indicator | `latestValue / targetValue × 100` |
+| `goalPct(indicators)` | Indicator[] | weighted average of `indicatorPct`; falls back to simple average if no weights set |
+| `boardPct(goals)` | Goal[] | weighted average of `goalPct`; falls back to simple average if no weights set |
+
+Arrow width on the Strategy Map is also derived from weight automatically:
+- ≤ 33% → thin (strokeWidth 1.5)
+- ≤ 66% → medium (strokeWidth 2.5)
+- > 66% → thick (strokeWidth 4.5)
 
 ---
 
@@ -439,4 +473,5 @@ npx prisma studio
 - **Tree data**: fetched flat, assembled client-side with `buildTree<T>` from `src/lib/tree.ts`.
 - **Period format**: KPI values use `"YYYY-MM"` (e.g. `"2026-06"`), displayed as `"Июнь 2026"` via `periodLabel()`.
 - **Canvas drag**: the Strategy Map uses a `useRef`-based drag system (no `setState` during `mousemove`) for smooth 60fps dragging without React re-renders.
+- **Arrow routing**: `getBestPorts()` picks the optimal connection edge (left/right/top/bottom) based on the dominant axis between cards (`|dx| ≥ |dy|` → horizontal, else vertical). Bezier control points follow the same axis.
 - **Cursor on Windows**: `cursor-move` is used instead of `cursor-grab` — the grab cursor renders white/invisible on Windows against white card backgrounds.

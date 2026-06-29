@@ -141,20 +141,35 @@ export default function OrgPage() {
                 <AddButton onClick={() => openCreatePos()} className="mt-3">Создать первую</AddButton>
               </div>
             )}
-            <div className="space-y-2">
-              {positions.map((pos) => (
-                <div key={pos.id} className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center gap-3 group">
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-gray-900">{pos.name}</p>
-                    {pos.orgUnit && <p className="text-xs text-gray-400">{pos.orgUnit.name}</p>}
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditPos(pos)}><Pencil size={13} /></Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600" onClick={() => setDeletePos(pos.id)}><Trash2 size={13} /></Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {positions.length > 0 && (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-10">#</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Должность</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Подразделение</th>
+                      <th className="w-16" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {positions.map((pos, idx) => (
+                      <tr key={pos.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-2.5 text-xs font-medium text-gray-400">{idx + 1}</td>
+                        <td className="px-4 py-2.5 font-medium text-gray-800">{pos.name}</td>
+                        <td className="px-4 py-2.5 text-xs text-gray-400">{pos.orgUnit?.name ?? <span className="text-gray-300">—</span>}</td>
+                        <td className="px-2 py-2.5">
+                          <div className="flex items-center gap-0.5 justify-end">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 cursor-pointer" onClick={() => openEditPos(pos)}><Pencil size={13} /></Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600 cursor-pointer" onClick={() => setDeletePos(pos.id)}><Trash2 size={13} /></Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </div>

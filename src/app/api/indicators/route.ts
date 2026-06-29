@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
       description: body.description,
       unit: body.unit,
       targetValue: body.targetValue ? Number(body.targetValue) : null,
+      weight: body.weight ? Number(body.weight) : null,
       deadline: body.deadline ? new Date(body.deadline) : null,
       ownerId: body.ownerId || null,
       goalId: body.goalId || null,

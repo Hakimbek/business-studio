@@ -4,7 +4,7 @@ import {
   forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Eye, Link2, PenLine, Plus, Pencil, Trash2, X, Map as MapIcon } from "lucide-react";
+import { ArrowLeft, ChevronRight, Eye, Link2, PenLine, Plus, Pencil, Trash2, X, Map as MapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { PageHeader } from "@/components/shared/PageHeader";
 import { AddButton } from "@/components/shared/AddButton";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import { cn, periodLabel } from "@/lib/utils";
+import { cn, periodLabel, boardPct } from "@/lib/utils";
 import type {
   Goal, Indicator, Project, StrategyMapBoard, StrategyMapEntry,
   StrategyMapIndicatorEntry, StrategyMapProjectEntry, StrategyMapRegion,
@@ -75,6 +75,7 @@ interface Arrow {
   sourceId: string;
   targetId: string;
   strength: number;
+  horizontal: boolean;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -91,8 +92,33 @@ const PROJ_D_COL = 96;
 
 // ── SVG Links overlay ─────────────────────────────────────────────────────────
 
+function getBestPorts(sr: DOMRect, tr: DOMRect, cr: DOMRect) {
+  const scx = (sr.left + sr.right) / 2 - cr.left;
+  const scy = (sr.top + sr.bottom) / 2 - cr.top;
+  const tcx = (tr.left + tr.right) / 2 - cr.left;
+  const tcy = (tr.top + tr.bottom) / 2 - cr.top;
+  const dx = tcx - scx;
+  const dy = tcy - scy;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    return dx >= 0
+      ? { x1: sr.right - cr.left, y1: scy, x2: tr.left - cr.left,  y2: tcy, horizontal: true }
+      : { x1: sr.left - cr.left,  y1: scy, x2: tr.right - cr.left, y2: tcy, horizontal: true };
+  } else {
+    return dy >= 0
+      ? { x1: scx, y1: sr.bottom - cr.top, x2: tcx, y2: tr.top - cr.top,    horizontal: false }
+      : { x1: scx, y1: sr.top - cr.top,    x2: tcx, y2: tr.bottom - cr.top, horizontal: false };
+  }
+}
+
+function weightToStrength(weight: number | null | undefined): number {
+  if (weight == null || weight <= 0) return 2;
+  if (weight <= 33) return 1;
+  if (weight <= 66) return 2;
+  return 3;
+}
+
 function LinksOverlay({
-  board, cardRefs, canvasRef, onDeleteLink, onUnlinkIndicator, onUnlinkProject, onUpdateStrength, viewMode,
+  board, cardRefs, canvasRef, onDeleteLink, onUnlinkIndicator, onUnlinkProject, viewMode, tick,
 }: {
   board: StrategyMapBoard;
   cardRefs: React.RefObject<Map<string, HTMLElement>>;
@@ -100,14 +126,17 @@ function LinksOverlay({
   onDeleteLink: (id: string) => void;
   onUnlinkIndicator: (indicatorId: string, goalId: string) => void;
   onUnlinkProject: (projectId: string, goalId: string) => void;
-  onUpdateStrength: (arrow: Arrow, strength: number) => void;
   viewMode: boolean;
+  tick: number;
 }) {
   const [arrows, setArrows] = useState<Arrow[]>([]);
   const [hovered, setHovered] = useState<string | null>(null);
   const entryGoalIds  = new Set(board.entries.map((e) => e.goalId));
   const indEntryIds   = new Set(board.indicatorEntries.map((e) => e.indicatorId));
   const projEntryIds  = new Set(board.projectEntries.map((e) => e.projectId));
+
+  const goalWeightMap = Object.fromEntries(board.entries.map(e => [e.goalId, e.goal.weight]));
+  const indWeightMap  = Object.fromEntries(board.indicatorEntries.map(e => [e.indicatorId, e.indicator.weight]));
 
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -119,33 +148,26 @@ function LinksOverlay({
       const s = cardRefs.current?.get(link.sourceGoalId);
       const t = cardRefs.current?.get(link.targetGoalId);
       if (!s || !t) continue;
-      const sr = s.getBoundingClientRect();
-      const tr = t.getBoundingClientRect();
-      next.push({ id: link.id, sourceId: link.sourceGoalId, targetId: link.targetGoalId, kind: "goal-goal", strength: link.strength ?? 2,
-        x1: sr.right - cr.left, y1: sr.top + sr.height / 2 - cr.top,
-        x2: tr.left - cr.left,  y2: tr.top + tr.height / 2 - cr.top });
+      const ports = getBestPorts(s.getBoundingClientRect(), t.getBoundingClientRect(), cr);
+      next.push({ id: link.id, sourceId: link.sourceGoalId, targetId: link.targetGoalId, kind: "goal-goal",
+        strength: weightToStrength(goalWeightMap[link.sourceGoalId]), ...ports });
     }
     for (const il of board.indicatorLinks) {
       if (!indEntryIds.has(il.indicatorId) || !entryGoalIds.has(il.goalId)) continue;
       const s = cardRefs.current?.get(`ind-${il.indicatorId}`);
       const t = cardRefs.current?.get(il.goalId);
       if (!s || !t) continue;
-      const sr = s.getBoundingClientRect();
-      const tr = t.getBoundingClientRect();
-      next.push({ id: il.id, sourceId: il.indicatorId, targetId: il.goalId, kind: "ind-goal", strength: il.strength ?? 2,
-        x1: sr.right - cr.left, y1: sr.top + sr.height / 2 - cr.top,
-        x2: tr.left - cr.left,  y2: tr.top + tr.height / 2 - cr.top });
+      const ports = getBestPorts(s.getBoundingClientRect(), t.getBoundingClientRect(), cr);
+      next.push({ id: il.id, sourceId: il.indicatorId, targetId: il.goalId, kind: "ind-goal",
+        strength: weightToStrength(indWeightMap[il.indicatorId]), ...ports });
     }
     for (const pl of board.projectLinks) {
       if (!projEntryIds.has(pl.projectId) || !entryGoalIds.has(pl.goalId)) continue;
       const s = cardRefs.current?.get(`proj-${pl.projectId}`);
       const t = cardRefs.current?.get(pl.goalId);
       if (!s || !t) continue;
-      const sr = s.getBoundingClientRect();
-      const tr = t.getBoundingClientRect();
-      next.push({ id: pl.id, sourceId: pl.projectId, targetId: pl.goalId, kind: "proj-goal", strength: pl.strength ?? 2,
-        x1: sr.right - cr.left, y1: sr.top + sr.height / 2 - cr.top,
-        x2: tr.left - cr.left,  y2: tr.top + tr.height / 2 - cr.top });
+      const ports = getBestPorts(s.getBoundingClientRect(), t.getBoundingClientRect(), cr);
+      next.push({ id: pl.id, sourceId: pl.projectId, targetId: pl.goalId, kind: "proj-goal", strength: 2, ...ports });
     }
 
     setArrows((prev) => {
@@ -176,8 +198,12 @@ function LinksOverlay({
         const isH = !viewMode && hovered === a.id;
         const color = a.kind === "ind-goal" ? "#0891b2" : a.kind === "proj-goal" ? "#ea580c" : "#6366f1";
         const markerId = isH ? "arr-h" : a.kind === "ind-goal" ? "arr-ind" : "arr";
-        const curve = Math.max(60, Math.abs(a.x2 - a.x1) * 0.45);
-        const d = `M ${a.x1} ${a.y1} C ${a.x1 + curve} ${a.y1} ${a.x2 - curve} ${a.y2} ${a.x2} ${a.y2}`;
+        const curve = a.horizontal
+          ? Math.max(60, Math.abs(a.x2 - a.x1) * 0.45)
+          : Math.max(60, Math.abs(a.y2 - a.y1) * 0.45);
+        const d = a.horizontal
+          ? `M ${a.x1} ${a.y1} C ${a.x1 + (a.x2 > a.x1 ? curve : -curve)} ${a.y1} ${a.x2 + (a.x2 > a.x1 ? -curve : curve)} ${a.y2} ${a.x2} ${a.y2}`
+          : `M ${a.x1} ${a.y1} C ${a.x1} ${a.y1 + (a.y2 > a.y1 ? curve : -curve)} ${a.x2} ${a.y2 + (a.y2 > a.y1 ? -curve : curve)} ${a.x2} ${a.y2}`;
         const mx = (a.x1 + a.x2) / 2;
         const my = (a.y1 + a.y2) / 2;
         const sw = a.strength === 1 ? 1.5 : a.strength === 3 ? 4.5 : 2.5;
@@ -195,32 +221,10 @@ function LinksOverlay({
               <g transform={`translate(${mx},${my})`}
                 onMouseEnter={() => setHovered(a.id)} onMouseLeave={() => setHovered(null)}
                 style={{ pointerEvents: "all" }}>
-                {/* Popup background */}
-                <rect x={-72} y={-15} width={144} height={30} rx={15} fill="white" stroke="#e5e7eb" strokeWidth={1} filter="url(#glow)" />
-                {/* Thin */}
-                <g transform="translate(-48,0)" style={{ cursor: "pointer" }}
-                  onClick={(e) => { e.stopPropagation(); onUpdateStrength(a, 1); }}>
-                  <rect x={-14} y={-13} width={28} height={26} rx={5} fill={a.strength === 1 ? "#eff6ff" : "transparent"} />
-                  <line x1={-9} y1={0} x2={9} y2={0} stroke={a.strength === 1 ? "#2563eb" : "#9ca3af"} strokeWidth={1.5} strokeLinecap="round" />
-                </g>
-                {/* Medium */}
-                <g transform="translate(-10,0)" style={{ cursor: "pointer" }}
-                  onClick={(e) => { e.stopPropagation(); onUpdateStrength(a, 2); }}>
-                  <rect x={-14} y={-13} width={28} height={26} rx={5} fill={a.strength === 2 ? "#eff6ff" : "transparent"} />
-                  <line x1={-9} y1={0} x2={9} y2={0} stroke={a.strength === 2 ? "#2563eb" : "#9ca3af"} strokeWidth={3} strokeLinecap="round" />
-                </g>
-                {/* Thick */}
-                <g transform="translate(28,0)" style={{ cursor: "pointer" }}
-                  onClick={(e) => { e.stopPropagation(); onUpdateStrength(a, 3); }}>
-                  <rect x={-14} y={-13} width={28} height={26} rx={5} fill={a.strength === 3 ? "#eff6ff" : "transparent"} />
-                  <line x1={-9} y1={0} x2={9} y2={0} stroke={a.strength === 3 ? "#2563eb" : "#9ca3af"} strokeWidth={5} strokeLinecap="round" />
-                </g>
-                {/* Separator */}
-                <line x1={48} y1={-8} x2={48} y2={8} stroke="#e5e7eb" strokeWidth={1} />
-                {/* Delete */}
-                <g transform="translate(60,0)" style={{ cursor: "pointer" }}
+                <rect x={-18} y={-15} width={36} height={30} rx={15} fill="white" stroke="#e5e7eb" strokeWidth={1} filter="url(#glow)" />
+                <g style={{ cursor: "pointer" }}
                   onClick={() => a.kind === "goal-goal" ? onDeleteLink(a.id) : a.kind === "proj-goal" ? onUnlinkProject(a.sourceId, a.targetId) : onUnlinkIndicator(a.sourceId, a.targetId)}>
-                  <rect x={-12} y={-13} width={24} height={26} rx={5} fill="transparent" />
+                  <rect x={-14} y={-13} width={28} height={26} rx={5} fill="transparent" />
                   <line x1={-4} y1={-4} x2={4} y2={4} stroke="#ef4444" strokeWidth={1.8} strokeLinecap="round" />
                   <line x1={4} y1={-4} x2={-4} y2={4} stroke="#ef4444" strokeWidth={1.8} strokeLinecap="round" />
                 </g>
@@ -387,10 +391,22 @@ function IndicatorCard({
   const borderColor = rag?.border ?? "#0891b2";
   const bgColor     = rag?.bg ?? "#ffffff";
 
+  const sortedVals = ind.values ?? [];
   const actual = selectedPeriod
-    ? (ind.values?.find(v => v.period === selectedPeriod)?.value ?? null)
-    : (ind.values?.[0]?.value ?? ind.actualValue);
+    ? (sortedVals.find(v => v.period === selectedPeriod)?.value ?? null)
+    : (sortedVals[0]?.value ?? ind.actualValue);
   const pct = (actual != null && ind.targetValue) ? Math.round((actual / ind.targetValue) * 100) : null;
+
+  let prevActual: number | null = null;
+  if (selectedPeriod) {
+    const idx = sortedVals.findIndex(v => v.period === selectedPeriod);
+    if (idx !== -1) prevActual = sortedVals[idx + 1]?.value ?? null;
+  } else {
+    prevActual = sortedVals[1]?.value ?? null;
+  }
+  const trend = (actual != null && prevActual != null)
+    ? actual > prevActual ? "up" : actual < prevActual ? "down" : "flat"
+    : null;
 
   return (
     <div
@@ -414,7 +430,12 @@ function IndicatorCard({
           {ind.targetValue != null && (
             <p className="text-[10px] text-gray-500">Цель: <strong className="text-gray-700">{ind.targetValue}{ind.unit ? ` ${ind.unit}` : ""}</strong></p>
           )}
-          {pct != null && <span className={cn("text-[10px] font-bold ml-auto", rag?.badge ?? "text-gray-400")}>{pct}%</span>}
+          <span className="ml-auto flex items-center gap-1">
+            {trend === "up" && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M6 10V2M6 2L2 6M6 2L10 6" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            {trend === "down" && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M6 2V10M6 10L2 6M6 10L10 6" stroke="#dc2626" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+            {trend === "flat" && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6H10" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round"/></svg>}
+            {pct != null && <span className={cn("text-[10px] font-bold", rag?.badge ?? "text-gray-400")}>{pct}%</span>}
+          </span>
         </div>
         {pct != null && (
           <div className="mt-1.5 h-1 rounded-full bg-gray-200 overflow-hidden">
@@ -587,9 +608,9 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
   const [connecting, setConnecting] = useState<ConnectSource | null>(null);
   const [addRegionOpen, setAddRegionOpen] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<string | null>(null);
-  const [panelCollapsed, setPanelCollapsed] = useState<Record<string, boolean>>({});
-  const [goalSearch, setGoalSearch] = useState("");
-  const [goalSortDir, setGoalSortDir] = useState<"asc" | "desc" | null>(null);
+  const [panelCollapsed, setPanelCollapsed] = useState<Record<string, boolean>>({ goals: true, inds: true, projs: true });
+  const [tick, setTick] = useState(0);
+  useEffect(() => { setTick(1); }, []);
 
   const allPeriods = useMemo(() => {
     const seen = new Set<string>();
@@ -617,15 +638,12 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
   const deleteLinkMut    = useMutation({ mutationFn: (linkId: string) => fetch(`/api/strategy-map-boards/${board.id}/links`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkId }) }), onSuccess: inv });
   const addIndLinkMut          = useMutation({ mutationFn: ({ indicatorId, goalId }: { indicatorId: string; goalId: string }) => fetch(`/api/strategy-map-boards/${board.id}/indicator-links`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ indicatorId, goalId }) }).then(r => r.json()), onSuccess: inv });
   const deleteIndLinkMut       = useMutation({ mutationFn: ({ indicatorId, goalId }: { indicatorId: string; goalId: string }) => fetch(`/api/strategy-map-boards/${board.id}/indicator-links`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ indicatorId, goalId }) }), onSuccess: inv });
-  const updateLinkStrengthMut  = useMutation({ mutationFn: ({ linkId, strength }: { linkId: string; strength: number }) => fetch(`/api/strategy-map-boards/${board.id}/links`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ linkId, strength }) }), onSuccess: inv });
-  const updateIndStrengthMut   = useMutation({ mutationFn: ({ indicatorId, goalId, strength }: { indicatorId: string; goalId: string; strength: number }) => fetch(`/api/strategy-map-boards/${board.id}/indicator-links`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ indicatorId, goalId, strength }) }), onSuccess: inv });
 
   const addProjMut        = useMutation({ mutationFn: ({ projectId, x, y }: { projectId: string; x: number; y: number }) => fetch(`/api/strategy-map-boards/${board.id}/project-entries`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, x, y }) }).then(r => r.json()), onSuccess: inv });
   const removeProjMut     = useMutation({ mutationFn: (projectId: string) => fetch(`/api/strategy-map-boards/${board.id}/project-entries`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId }) }), onSuccess: inv });
   const moveProjMut       = useMutation({ mutationFn: ({ projectId, x, y }: { projectId: string; x: number; y: number }) => fetch(`/api/strategy-map-boards/${board.id}/project-entries`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, x, y }) }), onSuccess: inv });
   const addProjLinkMut    = useMutation({ mutationFn: ({ projectId, goalId }: { projectId: string; goalId: string }) => fetch(`/api/strategy-map-boards/${board.id}/project-links`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, goalId }) }).then(r => r.json()), onSuccess: inv });
   const deleteProjLinkMut = useMutation({ mutationFn: ({ projectId, goalId }: { projectId: string; goalId: string }) => fetch(`/api/strategy-map-boards/${board.id}/project-links`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, goalId }) }), onSuccess: inv });
-  const updateProjStrengthMut = useMutation({ mutationFn: ({ projectId, goalId, strength }: { projectId: string; goalId: string; strength: number }) => fetch(`/api/strategy-map-boards/${board.id}/project-links`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ projectId, goalId, strength }) }), onSuccess: inv });
 
   // ── Ref-based drag ─────────────────────────────────────────────────────────
 
@@ -760,11 +778,6 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
   const poolInds  = allIndicators.filter(i => !assignedIndIds.has(i.id));
   const poolProjs = allProjects.filter(p => !assignedProjIds.has(p.id));
 
-  const visiblePoolGoals = useMemo(() => {
-    let list = poolGoals.filter(g => g.name.toLowerCase().includes(goalSearch.toLowerCase()));
-    if (goalSortDir) list = [...list].sort((a, b) => goalSortDir === "asc" ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name));
-    return list;
-  }, [poolGoals, goalSearch, goalSortDir]);
   const isEmpty   = board.regions.length === 0 && board.entries.length === 0 && board.indicatorEntries.length === 0 && board.projectEntries.length === 0;
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -790,37 +803,15 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
               </button>
               {!panelCollapsed.goals && (
                 <div className="p-1.5 space-y-1">
-                  {poolGoals.length > 0 && (
-                    <div className="flex items-center gap-1 mb-1">
-                      <div className="relative flex-1">
-                        <input
-                          value={goalSearch}
-                          onChange={e => setGoalSearch(e.target.value)}
-                          placeholder="Поиск..."
-                          className="w-full pl-2 pr-2 h-6 text-[11px] border border-gray-200 rounded bg-white outline-none focus:border-blue-400 transition-colors"
-                        />
-                      </div>
-                      <button
-                        onClick={() => setGoalSortDir(d => d === "asc" ? "desc" : d === "desc" ? null : "asc")}
-                        className={cn("h-6 px-1.5 rounded border text-[10px] font-medium transition-colors cursor-pointer shrink-0",
-                          goalSortDir ? "border-blue-400 text-blue-600 bg-blue-50" : "border-gray-200 text-gray-400 bg-white hover:border-gray-400")}
-                        title="Сортировка А→Я / Я→А"
-                      >
-                        {goalSortDir === "asc" ? "А→Я" : goalSortDir === "desc" ? "Я→А" : "А→Я"}
-                      </button>
-                    </div>
-                  )}
                   {poolGoals.length === 0
                     ? <p className="text-[11px] text-gray-400 italic px-1 py-0.5">Все на карте</p>
-                    : visiblePoolGoals.length === 0
-                      ? <p className="text-[11px] text-gray-400 italic px-1 py-0.5">Не найдено</p>
-                      : visiblePoolGoals.map(g => (
-                          <div key={g.id} draggable
-                            onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("kind", "goal"); e.dataTransfer.setData("id", g.id); }}
-                            className="bg-white border border-gray-200 rounded-md px-2 py-1.5 text-xs font-medium text-gray-700 cursor-move hover:border-indigo-400 hover:text-indigo-700 hover:shadow-sm transition-all select-none">
-                            {g.name}
-                          </div>
-                        ))
+                    : poolGoals.map(g => (
+                        <div key={g.id} draggable
+                          onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("kind", "goal"); e.dataTransfer.setData("id", g.id); }}
+                          className="bg-white border border-gray-200 rounded-md px-2 py-1.5 text-xs font-medium text-gray-700 cursor-move hover:border-indigo-400 hover:text-indigo-700 hover:shadow-sm transition-all select-none">
+                          {g.name}
+                        </div>
+                      ))
                   }
                 </div>
               )}
@@ -1034,15 +1025,11 @@ function BoardView({ board, allGoals, allIndicators, allProjects }: {
               );
             })}
 
-            <LinksOverlay board={board} cardRefs={cardRefs} canvasRef={canvasRef} viewMode={viewMode}
+            <LinksOverlay board={board} cardRefs={cardRefs} canvasRef={canvasRef} viewMode={viewMode} tick={tick}
               onDeleteLink={(id) => deleteLinkMut.mutate(id)}
               onUnlinkIndicator={(indicatorId, goalId) => deleteIndLinkMut.mutate({ indicatorId, goalId })}
               onUnlinkProject={(projectId, goalId) => deleteProjLinkMut.mutate({ projectId, goalId })}
-              onUpdateStrength={(arrow, strength) => {
-                if (arrow.kind === "goal-goal") updateLinkStrengthMut.mutate({ linkId: arrow.id, strength });
-                else if (arrow.kind === "proj-goal") updateProjStrengthMut.mutate({ projectId: arrow.sourceId, goalId: arrow.targetId, strength });
-                else updateIndStrengthMut.mutate({ indicatorId: arrow.sourceId, goalId: arrow.targetId, strength });
-              }} />
+              />
           </div>
         </div>
       </div>
@@ -1068,10 +1055,6 @@ export default function StrategyMapPage() {
     queryKey: ["strategy-map-boards"],
     queryFn: () => fetch("/api/strategy-map-boards").then(r => r.json()),
   });
-
-  useEffect(() => {
-    if (activeBoardId === null && boards.length > 0) setActiveBoardId(boards[0].id);
-  }, [boards, activeBoardId]);
 
   const { data: allGoals = [] } = useQuery<Goal[]>({
     queryKey: ["goals"],
@@ -1109,75 +1092,143 @@ export default function StrategyMapPage() {
     mutationFn: (id: string) => fetch(`/api/strategy-map-boards/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["strategy-map-boards"] });
-      if (deleteId === activeBoardId) setActiveBoardId(boards.find(b => b.id !== deleteId)?.id ?? null);
+      if (deleteId === activeBoardId) setActiveBoardId(null);
       setDeleteId(null);
     },
   });
 
   const activeBoard = boards.find(b => b.id === activeBoardId) ?? null;
 
+  // ── Board canvas view ──────────────────────────────────────────────────────
+  if (activeBoard) {
+    return (
+      <div className="flex flex-col flex-1 overflow-hidden">
+        <div className="flex items-center gap-3 px-6 py-3 border-b border-gray-100 bg-white shrink-0">
+          <button
+            onClick={() => setActiveBoardId(null)}
+            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 transition-colors cursor-pointer"
+          >
+            <ArrowLeft size={15} /> Все карты
+          </button>
+          <span className="text-gray-300">/</span>
+          {renamingId === activeBoard.id ? (
+            <form onSubmit={(e) => { e.preventDefault(); renameMut.mutate({ id: activeBoard.id, name: renameValue }); }}
+              className="flex items-center gap-1">
+              <Input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
+                className="h-7 text-sm w-48" onBlur={() => setRenamingId(null)} />
+            </form>
+          ) : (
+            <span
+              className="text-sm font-semibold text-gray-800 cursor-text hover:text-blue-600 transition-colors"
+              onDoubleClick={() => { setRenamingId(activeBoard.id); setRenameValue(activeBoard.name); }}
+              title="Дважды нажмите для переименования"
+            >
+              {activeBoard.name}
+            </span>
+          )}
+          {(() => {
+            const pct = boardPct(activeBoard.entries.map(e => e.goal));
+            if (pct == null) return null;
+            const cls = pct >= 100
+              ? "bg-green-100 text-green-700"
+              : pct >= 70
+                ? "bg-yellow-100 text-yellow-700"
+                : "bg-red-100 text-red-700";
+            return (
+              <span className={`ml-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${cls}`}>
+                {pct}%
+              </span>
+            );
+          })()}
+        </div>
+        <BoardView key={activeBoard.id} board={activeBoard} allGoals={allGoals} allIndicators={allIndicators} allProjects={allProjects} />
+        <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)}
+          onConfirm={() => deleteId && deleteMut.mutate(deleteId)} loading={deleteMut.isPending} />
+      </div>
+    );
+  }
+
+  // ── Boards index view ──────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
+    <div className="flex flex-col flex-1 overflow-auto">
       <PageHeader
         title="Стратегические карты"
         description="Свободная расстановка целей и показателей на холсте"
         action={<AddButton onClick={() => setCreating(true)}>Добавить карту</AddButton>}
       />
 
-      {(boards.length > 0 || creating) && (
-        <div className="flex items-center gap-1 px-6 py-2 border-b border-gray-100 bg-white overflow-x-auto shrink-0">
+      <div className="p-6">
+        {isLoading && <p className="text-sm text-gray-400">Загрузка...</p>}
+
+        {!isLoading && boards.length === 0 && !creating && (
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3 py-20">
+            <MapIcon size={40} className="opacity-20" />
+            <p className="text-sm">Нет стратегических карт.</p>
+            <AddButton onClick={() => setCreating(true)}>Создать первую карту</AddButton>
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           {boards.map((board) => (
-            <div key={board.id} className="flex items-center shrink-0">
+            <div
+              key={board.id}
+              onClick={() => setActiveBoardId(board.id)}
+              className="group bg-white border border-gray-200 rounded-xl p-5 hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                  <MapIcon size={18} className="text-blue-500" />
+                </div>
+                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors cursor-pointer"
+                    onClick={() => { setRenamingId(board.id); setRenameValue(board.name); }}
+                  ><Pencil size={12} /></button>
+                  <button
+                    className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors cursor-pointer"
+                    onClick={() => setDeleteId(board.id)}
+                  ><Trash2 size={12} /></button>
+                </div>
+              </div>
               {renamingId === board.id ? (
                 <form onSubmit={(e) => { e.preventDefault(); renameMut.mutate({ id: board.id, name: renameValue }); }}
-                  className="flex items-center gap-1">
+                  onClick={(e) => e.stopPropagation()}>
                   <Input autoFocus value={renameValue} onChange={(e) => setRenameValue(e.target.value)}
-                    className="h-7 text-xs w-36" onBlur={() => setRenamingId(null)} />
+                    className="h-7 text-sm w-full" onBlur={() => setRenamingId(null)} />
                 </form>
               ) : (
-                <button onClick={() => setActiveBoardId(board.id)}
-                  className={cn("group flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer",
-                    activeBoardId === board.id ? "bg-blue-50 text-blue-700" : "text-gray-500 hover:bg-gray-100 hover:text-gray-700")}>
-                  <MapIcon size={12} />
-                  {board.name}
-                  <span className="flex items-center gap-0.5 ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <span onClick={(e) => { e.stopPropagation(); setRenamingId(board.id); setRenameValue(board.name); }}
-                      className="hover:text-blue-600 p-0.5 rounded cursor-pointer"><Pencil size={10} /></span>
-                    <span onClick={(e) => { e.stopPropagation(); setDeleteId(board.id); }}
-                      className="hover:text-red-500 p-0.5 rounded cursor-pointer"><Trash2 size={10} /></span>
-                  </span>
-                </button>
+                <p className="text-sm font-semibold text-gray-800 mb-2 leading-snug">{board.name}</p>
               )}
+              <div className="flex items-center gap-3 text-xs text-gray-400">
+                {board.entries.length > 0 && <span>{board.entries.length} целей</span>}
+                {board.indicatorEntries.length > 0 && <span>{board.indicatorEntries.length} показ.</span>}
+                {board.projectEntries.length > 0 && <span>{board.projectEntries.length} проектов</span>}
+                {board.entries.length === 0 && board.indicatorEntries.length === 0 && board.projectEntries.length === 0 && (
+                  <span className="italic">Пустая карта</span>
+                )}
+              </div>
             </div>
           ))}
 
           {creating && (
-            <form onSubmit={(e) => { e.preventDefault(); if (newName.trim()) createMut.mutate(newName.trim()); }}
-              className="flex items-center gap-1 shrink-0">
-              <Input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
-                placeholder="Название карты" className="h-7 text-xs w-36"
-                onBlur={() => { if (!newName.trim()) setCreating(false); }} />
-              <Button type="submit" size="sm" className="h-7 px-2 text-xs" disabled={!newName.trim()}><Plus size={12} /></Button>
-              <Button type="button" variant="ghost" size="sm" className="h-7 px-2"
-                onClick={() => { setCreating(false); setNewName(""); }}><X size={12} /></Button>
-            </form>
+            <div className="bg-white border-2 border-dashed border-blue-300 rounded-xl p-5">
+              <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center mb-3">
+                <MapIcon size={18} className="text-blue-400" />
+              </div>
+              <form onSubmit={(e) => { e.preventDefault(); if (newName.trim()) createMut.mutate(newName.trim()); }}>
+                <Input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Название карты" className="h-8 text-sm mb-2"
+                  onBlur={() => { if (!newName.trim()) setCreating(false); }} />
+                <div className="flex gap-1">
+                  <Button type="submit" size="sm" className="h-7 px-3 text-xs flex-1" disabled={!newName.trim()}>Создать</Button>
+                  <Button type="button" variant="ghost" size="sm" className="h-7 px-2 cursor-pointer"
+                    onClick={() => { setCreating(false); setNewName(""); }}><X size={12} /></Button>
+                </div>
+              </form>
+            </div>
           )}
         </div>
-      )}
-
-      {isLoading && <div className="flex-1 flex items-center justify-center text-sm text-gray-400">Загрузка...</div>}
-
-      {!isLoading && boards.length === 0 && !creating && (
-        <div className="flex-1 flex flex-col items-center justify-center text-gray-400 gap-3">
-          <MapIcon size={40} className="opacity-20" />
-          <p className="text-sm">Нет стратегических карт.</p>
-          <AddButton onClick={() => setCreating(true)}>Создать первую карту</AddButton>
-        </div>
-      )}
-
-      {activeBoard && (
-        <BoardView key={activeBoard.id} board={activeBoard} allGoals={allGoals} allIndicators={allIndicators} allProjects={allProjects} />
-      )}
+      </div>
 
       <ConfirmDialog open={!!deleteId} onClose={() => setDeleteId(null)}
         onConfirm={() => deleteId && deleteMut.mutate(deleteId)} loading={deleteMut.isPending} />

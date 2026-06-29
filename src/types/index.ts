@@ -8,6 +8,7 @@ export interface Goal {
   name: string;
   description?: string | null;
   weight?: number | null;
+  deadline?: string | null;
   strategyId?: string | null;
   ownerId?: string | null;
   owner?: Position | null;
@@ -32,6 +33,7 @@ export interface Indicator {
   unit?: string | null;
   targetValue?: number | null;
   actualValue?: number | null;
+  weight?: number | null;
   frequency?: string | null;
   deadline?: string | null;
   goalId?: string | null;

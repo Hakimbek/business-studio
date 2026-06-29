@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, ArrowUpDown, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddButton } from "@/components/shared/AddButton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import type { Goal } from "@/types";
+import { goalPct, periodLabel } from "@/lib/utils";
 
 interface Strategy { id: string; name: string; color: string; }
 interface Position { id: string; name: string; }
@@ -21,11 +22,12 @@ interface FormState {
   name: string;
   description: string;
   weight: string;
+  deadline: string;
   strategyId: string;
   ownerId: string;
 }
 
-const empty: FormState = { name: "", description: "", weight: "", strategyId: "", ownerId: "" };
+const empty: FormState = { name: "", description: "", weight: "", deadline: "", strategyId: "", ownerId: "" };
 
 export default function GoalsPage() {
   const qc = useQueryClient();
@@ -34,6 +36,8 @@ export default function GoalsPage() {
   const [editGoal, setEditGoal] = useState<Goal | null>(null);
   const [form, setForm] = useState<FormState>(empty);
   const [filterStrategyId, setFilterStrategyId] = useState<string>("__all__");
+  const [search, setSearch] = useState("");
+  const [sortNewest, setSortNewest] = useState(true);
 
   const { data: goals = [], isLoading } = useQuery<Goal[]>({
     queryKey: ["goals"],
@@ -71,7 +75,7 @@ export default function GoalsPage() {
 
   function openEdit(goal: Goal) {
     setEditGoal(goal);
-    setForm({ name: goal.name, description: goal.description ?? "", weight: goal.weight?.toString() ?? "", strategyId: goal.strategyId ?? "", ownerId: goal.ownerId ?? "" });
+    setForm({ name: goal.name, description: goal.description ?? "", weight: goal.weight?.toString() ?? "", deadline: goal.deadline ?? "", strategyId: goal.strategyId ?? "", ownerId: goal.ownerId ?? "" });
     setDialogOpen(true);
   }
 
@@ -86,11 +90,23 @@ export default function GoalsPage() {
 
   const strategyMap = Object.fromEntries(strategies.map((s) => [s.id, s]));
 
-  const visibleGoals = filterStrategyId === "__all__"
-    ? goals
-    : filterStrategyId === "__none__"
-      ? goals.filter((g) => !g.strategyId)
-      : goals.filter((g) => g.strategyId === filterStrategyId);
+  const visibleGoals = useMemo(() => {
+    let list = filterStrategyId === "__all__"
+      ? goals
+      : filterStrategyId === "__none__"
+        ? goals.filter((g) => !g.strategyId)
+        : goals.filter((g) => g.strategyId === filterStrategyId);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      list = list.filter((g) => g.name.toLowerCase().includes(q));
+    }
+    list = [...list].sort((a, b) =>
+      sortNewest
+        ? new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        : new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+    return list;
+  }, [goals, filterStrategyId, search, sortNewest]);
 
   return (
     <div className="flex-1 overflow-auto">
@@ -130,6 +146,26 @@ export default function GoalsPage() {
           </div>
         )}
 
+        {/* Search + sort toolbar */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className="relative flex-1 max-w-xs">
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Поиск по названию..."
+              className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-blue-400 transition-colors bg-white"
+            />
+          </div>
+          <button
+            onClick={() => setSortNewest((p) => !p)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white hover:bg-gray-50 transition-colors cursor-pointer text-gray-600"
+          >
+            <ArrowUpDown size={13} />
+            {sortNewest ? "Сначала новые" : "Сначала старые"}
+          </button>
+        </div>
+
         {isLoading && <p className="text-sm text-gray-400 px-2">Загрузка...</p>}
 
         {!isLoading && goals.length === 0 && (
@@ -144,38 +180,62 @@ export default function GoalsPage() {
         )}
 
         {visibleGoals.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-            {visibleGoals.map((goal) => {
-              const strategy = goal.strategyId ? strategyMap[goal.strategyId] : null;
-              return (
-                <div key={goal.id} className="flex items-center gap-3 px-4 py-3 group hover:bg-gray-50 transition-colors">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-800 truncate">{goal.name}</span>
-                      {strategy && (
-                        <span className="flex items-center gap-1 text-xs text-gray-400 shrink-0">
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ background: strategy.color }} />
-                          {strategy.name}
-                        </span>
-                      )}
-                    </div>
-                    {goal.description && (
-                      <p className="text-xs text-gray-400 truncate mt-0.5">{goal.description}</p>
-                    )}
-                    {goal.owner && (
-                      <p className="text-xs text-gray-400 mt-0.5">Ответственный: {goal.owner.name}</p>
-                    )}
-                  </div>
-                  {goal.weight != null && (
-                    <span className="text-xs text-gray-400 shrink-0">{goal.weight}%</span>
-                  )}
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="icon" className="h-7 w-7 cursor-pointer" onClick={() => openEdit(goal)}><Pencil size={13} /></Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600 cursor-pointer" onClick={() => setDeleteId(goal.id)}><Trash2 size={13} /></Button>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50">
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-10">#</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Название</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Стратегия</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ответственный</th>
+                  <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-28">Дедлайн</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Вес</th>
+                  <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Выполнение</th>
+                  <th className="w-16" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {visibleGoals.map((goal, idx) => {
+                  const strategy = goal.strategyId ? strategyMap[goal.strategyId] : null;
+                  return (
+                    <tr key={goal.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-2.5 text-xs text-gray-400 font-medium">{idx + 1}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="font-medium text-gray-800">{goal.name}</span>
+                        {goal.description && <p className="text-xs text-gray-400 truncate mt-0.5 max-w-xs">{goal.description}</p>}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {strategy ? (
+                          <span className="flex items-center gap-1.5 text-xs text-gray-600">
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: strategy.color }} />
+                            {strategy.name}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-gray-500">{goal.owner?.name ?? <span className="text-gray-300">—</span>}</td>
+                      <td className="px-4 py-2.5 text-xs text-gray-500">{goal.deadline ? periodLabel(goal.deadline) : <span className="text-gray-300">—</span>}</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-semibold text-gray-700">{goal.weight != null ? `${goal.weight}%` : <span className="text-gray-300">—</span>}</td>
+                      <td className="px-4 py-2.5 text-right text-xs font-semibold">
+                        {(() => {
+                          const pct = goalPct(goal.indicators ?? []);
+                          if (pct == null) return <span className="text-gray-300 font-normal">—</span>;
+                          const cls = pct >= 100 ? "text-green-600" : pct >= 70 ? "text-yellow-600" : "text-red-500";
+                          return <span className={cls}>{pct}%</span>;
+                        })()}
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <div className="flex items-center gap-0.5 justify-end">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 cursor-pointer" onClick={() => openEdit(goal)}><Pencil size={13} /></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-red-400 hover:text-red-600 cursor-pointer" onClick={() => setDeleteId(goal.id)}><Trash2 size={13} /></Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -234,7 +294,11 @@ export default function GoalsPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Вес, %</Label>
-              <Input type="number" min={0} max={100} value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} placeholder="100" />
+              <Input type="number" min={0} max={100} value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} placeholder="Введите вес в процентах" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Дедлайн</Label>
+              <Input type="month" value={form.deadline} onChange={(e) => setForm({ ...form, deadline: e.target.value })} />
             </div>
           </div>
           <DialogFooter>

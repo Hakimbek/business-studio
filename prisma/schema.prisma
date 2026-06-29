@@ -75,6 +75,7 @@ model Goal {
   name        String
   description String?
   weight      Float?
+  deadline    String?
 
   companyId String
   company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -178,6 +179,7 @@ model Indicator {
   unit        String?
   targetValue Float?
   actualValue Float?
+  weight      Float?
   frequency   String?
   deadline    DateTime?
 

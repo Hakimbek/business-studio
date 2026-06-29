@@ -6,7 +6,12 @@ export async function GET(req: NextRequest) {
   if (!companyId) return NextResponse.json([]);
   const goals = await prisma.goal.findMany({
     where: { companyId },
-    include: { owner: true, indicators: true },
+    include: {
+      owner: true,
+      indicators: {
+        include: { values: { orderBy: { period: "desc" }, take: 1 } },
+      },
+    },
     orderBy: { createdAt: "asc" },
   });
   return NextResponse.json(goals);
@@ -21,11 +26,17 @@ export async function POST(req: NextRequest) {
       name: body.name,
       description: body.description,
       weight: body.weight ? Number(body.weight) : null,
+      deadline: body.deadline || null,
       ownerId: body.ownerId || null,
       strategyId: body.strategyId || null,
       companyId,
     },
-    include: { owner: true, indicators: true },
+    include: {
+      owner: true,
+      indicators: {
+        include: { values: { orderBy: { period: "desc" }, take: 1 } },
+      },
+    },
   });
   return NextResponse.json(goal, { status: 201 });
 }

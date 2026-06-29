@@ -20,6 +20,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       name: body.name,
       description: body.description,
       weight: body.weight ? Number(body.weight) : null,
+      deadline: body.deadline || null,
       ownerId: body.ownerId || null,
       strategyId: body.strategyId || null,
     },
