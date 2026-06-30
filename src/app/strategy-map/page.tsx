@@ -426,21 +426,31 @@ function IndicatorCard({
     >
       <div className="p-3">
         <p className="text-xs font-semibold text-gray-800 leading-snug">{ind.name}</p>
-        <div className="mt-1.5 flex items-center gap-2">
-          {ind.targetValue != null && (
-            <p className="text-[10px] text-gray-500">Цель: <strong className="text-gray-700">{ind.targetValue}{ind.unit ? ` ${ind.unit}` : ""}</strong></p>
-          )}
-          <span className="ml-auto flex items-center gap-1">
-            {trend === "up" && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M6 10V2M6 2L2 6M6 2L10 6" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-            {trend === "down" && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M6 2V10M6 10L2 6M6 10L10 6" stroke="#dc2626" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-            {trend === "flat" && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6H10" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round"/></svg>}
-            {pct != null && <span className={cn("text-[10px] font-bold", rag?.badge ?? "text-gray-400")}>{pct}%</span>}
-          </span>
-        </div>
-        {pct != null && (
-          <div className="mt-1.5 h-1 rounded-full bg-gray-200 overflow-hidden">
-            <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: borderColor }} />
+        {ind.type === "BOOLEAN" ? (
+          <div className="mt-1.5">
+            {actual != null
+              ? <span className={cn("text-[11px] font-semibold px-2 py-0.5 rounded-full", actual === 1 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600")}>{actual === 1 ? "Да" : "Нет"}</span>
+              : <span className="text-[10px] text-gray-400">Нет данных</span>}
           </div>
+        ) : (
+          <>
+            <div className="mt-1.5 flex items-center gap-2">
+              {ind.targetValue != null && (
+                <p className="text-[10px] text-gray-500">Цель: <strong className="text-gray-700">{ind.targetValue}{ind.unit ? ` ${ind.unit}` : ""}</strong></p>
+              )}
+              <span className="ml-auto flex items-center gap-1">
+                {trend === "up" && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M6 10V2M6 2L2 6M6 2L10 6" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                {trend === "down" && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M6 2V10M6 10L2 6M6 10L10 6" stroke="#dc2626" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                {trend === "flat" && <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M2 6H10" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round"/></svg>}
+                {pct != null && <span className={cn("text-[10px] font-bold", rag?.badge ?? "text-gray-400")}>{pct}%</span>}
+              </span>
+            </div>
+            {pct != null && (
+              <div className="mt-1.5 h-1 rounded-full bg-gray-200 overflow-hidden">
+                <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: borderColor }} />
+              </div>
+            )}
+          </>
         )}
       </div>
 

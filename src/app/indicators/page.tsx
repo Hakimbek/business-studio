@@ -6,7 +6,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Pencil, PlusCircle, Trash2, X, Search, ArrowUp, ArrowDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddButton } from "@/components/shared/AddButton";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,8 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import type { Indicator } from "@/types";
-import { periodLabel, MONTHS_RU } from "@/lib/utils";
+import type { Indicator, IndicatorType } from "@/types";
+import { periodLabel } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
 // ─── Utils ────────────────────────────────────────────────────────────────────
@@ -42,8 +41,10 @@ interface IndicatorValue { id: string; period: string; value: number; note?: str
 
 function PeriodSection({ indicator }: { indicator: Indicator }) {
   const qc = useQueryClient();
+  const isBool = indicator.type === "BOOLEAN";
   const [period, setPeriod] = useState(currentPeriod());
   const [value, setValue] = useState("");
+  const [boolValue, setBoolValue] = useState<1 | 0>(1);
   const [note, setNote] = useState("");
   const [adding, setAdding] = useState(false);
 
@@ -72,6 +73,11 @@ function PeriodSection({ indicator }: { indicator: Indicator }) {
 
   const months = monthOptions();
 
+  function handleSave() {
+    const numVal = isBool ? boolValue : Number(value);
+    addMut.mutate({ indicatorId: indicator.id, period, value: numVal, note });
+  }
+
   return (
     <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 space-y-3">
       {values.length > 0 && (
@@ -79,14 +85,36 @@ function PeriodSection({ indicator }: { indicator: Indicator }) {
           <thead>
             <tr className="text-gray-400 font-medium">
               <th className="text-left pb-1.5">Период</th>
-              <th className="text-right pb-1.5">Факт</th>
-              <th className="text-right pb-1.5">Цель</th>
-              <th className="text-right pb-1.5">%</th>
+              {isBool ? (
+                <th className="text-right pb-1.5">Статус</th>
+              ) : (
+                <>
+                  <th className="text-right pb-1.5">Факт</th>
+                  <th className="text-right pb-1.5">Цель</th>
+                  <th className="text-right pb-1.5">%</th>
+                </>
+              )}
               <th className="w-6" />
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {values.map((v) => {
+              if (isBool) {
+                const done = v.value === 1;
+                return (
+                  <tr key={v.id} className="group hover:bg-gray-100 transition-colors">
+                    <td className="py-1.5 text-gray-700 font-medium">{periodLabel(v.period)}</td>
+                    <td className="py-1.5 text-right">
+                      <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", done ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600")}>
+                        {done ? "Да" : "Нет"}
+                      </span>
+                    </td>
+                    <td className="py-1.5 text-right">
+                      <button onClick={() => deleteMut.mutate(v.id)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity cursor-pointer"><X size={12} /></button>
+                    </td>
+                  </tr>
+                );
+              }
               const pct = indicator.targetValue ? Math.round((v.value / indicator.targetValue) * 100) : null;
               const pctColor = pct == null ? "text-gray-400" : pct >= 100 ? "text-green-600" : pct >= 70 ? "text-yellow-600" : "text-red-500";
               return (
@@ -96,9 +124,7 @@ function PeriodSection({ indicator }: { indicator: Indicator }) {
                   <td className="py-1.5 text-right text-gray-400">{indicator.targetValue ?? "—"}{indicator.unit ? ` ${indicator.unit}` : ""}</td>
                   <td className={`py-1.5 text-right font-bold ${pctColor}`}>{pct != null ? `${pct}%` : "—"}</td>
                   <td className="py-1.5 text-right">
-                    <button onClick={() => deleteMut.mutate(v.id)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity cursor-pointer">
-                      <X size={12} />
-                    </button>
+                    <button onClick={() => deleteMut.mutate(v.id)} className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-opacity cursor-pointer"><X size={12} /></button>
                   </td>
                 </tr>
               );
@@ -113,7 +139,7 @@ function PeriodSection({ indicator }: { indicator: Indicator }) {
 
       {adding ? (
         <div className="bg-white rounded-lg border border-gray-200 p-3 space-y-2">
-          <div className="grid grid-cols-2 gap-2">
+          <div className={cn("grid gap-2", isBool ? "grid-cols-1" : "grid-cols-2")}>
             <div>
               <Label className="text-xs mb-1 block">Период</Label>
               <Select value={period} onValueChange={(v) => setPeriod(v ?? currentPeriod())}>
@@ -123,18 +149,34 @@ function PeriodSection({ indicator }: { indicator: Indicator }) {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <Label className="text-xs mb-1 block">Факт{indicator.unit ? ` (${indicator.unit})` : ""}</Label>
-              <Input type="number" value={value} onChange={(e) => setValue(e.target.value)}
-                placeholder="0" className="h-7 text-xs" autoFocus />
-            </div>
+            {isBool ? (
+              <div>
+                <Label className="text-xs mb-1 block">Выполнено?</Label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setBoolValue(1)}
+                    className={cn("flex-1 h-7 rounded-md text-xs font-semibold border transition-colors cursor-pointer", boolValue === 1 ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200 hover:border-green-400")}
+                  >Да</button>
+                  <button
+                    onClick={() => setBoolValue(0)}
+                    className={cn("flex-1 h-7 rounded-md text-xs font-semibold border transition-colors cursor-pointer", boolValue === 0 ? "bg-red-500 text-white border-red-500" : "bg-white text-gray-600 border-gray-200 hover:border-red-400")}
+                  >Нет</button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <Label className="text-xs mb-1 block">Факт{indicator.unit ? ` (${indicator.unit})` : ""}</Label>
+                <Input type="number" value={value} onChange={(e) => setValue(e.target.value)}
+                  placeholder="0" className="h-7 text-xs" autoFocus />
+              </div>
+            )}
           </div>
           <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Примечание (необязательно)" className="h-7 text-xs" />
           <div className="flex gap-2 justify-end">
             <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={() => setAdding(false)}>Отмена</Button>
             <Button size="sm" className="h-6 text-xs px-2"
-              onClick={() => addMut.mutate({ indicatorId: indicator.id, period, value: Number(value), note })}
-              disabled={!value || addMut.isPending}>
+              onClick={handleSave}
+              disabled={(!isBool && !value) || addMut.isPending}>
               {addMut.isPending ? "..." : "Сохранить"}
             </Button>
           </div>
@@ -151,10 +193,10 @@ function PeriodSection({ indicator }: { indicator: Indicator }) {
 // ─── Form ─────────────────────────────────────────────────────────────────────
 
 interface FormState {
-  name: string; description: string; unit: string;
-  targetValue: string; weight: string; deadline: string; ownerId: string;
+  name: string; description: string; type: IndicatorType;
+  unit: string; targetValue: string; weight: string; deadline: string; ownerId: string;
 }
-const empty: FormState = { name: "", description: "", unit: "", targetValue: "", weight: "", deadline: "", ownerId: "" };
+const empty: FormState = { name: "", description: "", type: "NUMERIC", unit: "", targetValue: "", weight: "", deadline: "", ownerId: "" };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -195,11 +237,19 @@ export default function IndicatorsPage() {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["indicators"] }); setDeleteId(null); },
   });
 
-
   function openCreate() { setEditItem(null); setForm(empty); setDialogOpen(true); }
   function openEdit(item: Indicator) {
     setEditItem(item);
-    setForm({ name: item.name, description: item.description ?? "", unit: item.unit ?? "", targetValue: item.targetValue?.toString() ?? "", weight: item.weight?.toString() ?? "", deadline: item.deadline ? item.deadline.slice(0, 10) : "", ownerId: item.ownerId ?? "" });
+    setForm({
+      name: item.name,
+      description: item.description ?? "",
+      type: item.type ?? "NUMERIC",
+      unit: item.unit ?? "",
+      targetValue: item.targetValue?.toString() ?? "",
+      weight: item.weight?.toString() ?? "",
+      deadline: item.deadline ? item.deadline.slice(0, 10) : "",
+      ownerId: item.ownerId ?? "",
+    });
     setDialogOpen(true);
   }
   function closeDialog() { setDialogOpen(false); setEditItem(null); setForm(empty); }
@@ -209,6 +259,7 @@ export default function IndicatorsPage() {
   }
 
   const loading = createMutation.isPending || updateMutation.isPending;
+  const isBoolForm = form.type === "BOOLEAN";
 
   const visibleIndicators = useMemo(() => {
     const list = indicators.filter((ind) =>
@@ -267,7 +318,8 @@ export default function IndicatorsPage() {
                 <tr className="border-b border-gray-100 bg-gray-50">
                   <th className="text-center px-3 py-2.5 text-xs font-semibold text-gray-400 w-10">#</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Название</th>
-                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Цель (зн.)</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Тип</th>
+                  <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Цель</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Факт</th>
                   <th className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">%</th>
                   <th className="text-right px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide w-16">Вес</th>
@@ -278,18 +330,15 @@ export default function IndicatorsPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {visibleIndicators.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="px-3 py-6 text-sm text-center text-gray-400">Ничего не найдено</td>
-                  </tr>
+                  <tr><td colSpan={10} className="px-3 py-6 text-sm text-center text-gray-400">Ничего не найдено</td></tr>
                 )}
                 {visibleIndicators.map((ind, idx) => {
-                  const pct = ind.targetValue && ind.actualValue != null
-                    ? Math.round((ind.actualValue / ind.targetValue) * 100)
-                    : null;
-                  const pctColor = pct == null ? "text-gray-400"
-                    : pct >= 100 ? "text-green-600"
-                    : pct >= 70  ? "text-yellow-600"
-                    : "text-red-500";
+                  const isBool = ind.type === "BOOLEAN";
+                  const latestVal = ind.values?.[0]?.value ?? ind.actualValue;
+                  const pct = isBool
+                    ? (latestVal != null ? (latestVal === 1 ? 100 : 0) : null)
+                    : (ind.targetValue && latestVal != null ? Math.round((latestVal / ind.targetValue) * 100) : null);
+                  const pctColor = pct == null ? "text-gray-400" : pct >= 100 ? "text-green-600" : pct >= 70 ? "text-yellow-600" : "text-red-500";
 
                   return (
                     <tr key={ind.id}
@@ -300,15 +349,26 @@ export default function IndicatorsPage() {
                         <div className="font-medium text-gray-900 text-sm">{ind.name}</div>
                         {ind.goal && <div className="text-[11px] text-gray-400 mt-0.5">{ind.goal.name}</div>}
                       </td>
-                      <td className="px-3 py-2.5 text-sm text-gray-700">
-                        {ind.targetValue != null
-                          ? <>{ind.targetValue}{ind.unit && <span className="text-gray-400 ml-1">{ind.unit}</span>}</>
-                          : <span className="text-gray-300">—</span>}
+                      <td className="px-3 py-2.5">
+                        <span className={cn("text-[11px] font-medium px-1.5 py-0.5 rounded", isBool ? "bg-purple-50 text-purple-600" : "bg-blue-50 text-blue-600")}>
+                          {isBool ? "Да/Нет" : "Числовой"}
+                        </span>
                       </td>
                       <td className="px-3 py-2.5 text-sm text-gray-700">
-                        {ind.actualValue != null
-                          ? <>{ind.actualValue}{ind.unit && <span className="text-gray-400 ml-1">{ind.unit}</span>}</>
-                          : <span className="text-gray-300">—</span>}
+                        {isBool
+                          ? <span className="text-gray-400 text-xs">—</span>
+                          : ind.targetValue != null
+                            ? <>{ind.targetValue}{ind.unit && <span className="text-gray-400 ml-1">{ind.unit}</span>}</>
+                            : <span className="text-gray-300">—</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-sm text-gray-700">
+                        {isBool
+                          ? latestVal != null
+                            ? <span className={cn("text-xs font-semibold px-2 py-0.5 rounded-full", latestVal === 1 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600")}>{latestVal === 1 ? "Да" : "Нет"}</span>
+                            : <span className="text-gray-300">—</span>
+                          : latestVal != null
+                            ? <>{latestVal}{ind.unit && <span className="text-gray-400 ml-1">{ind.unit}</span>}</>
+                            : <span className="text-gray-300">—</span>}
                       </td>
                       <td className={cn("px-3 py-2.5 text-sm font-semibold", pctColor)}>
                         {pct != null ? `${pct}%` : <span className="text-gray-300 font-normal">—</span>}
@@ -346,23 +406,38 @@ export default function IndicatorsPage() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
+              <Label>Тип показателя</Label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setForm({ ...form, type: "NUMERIC" })}
+                  className={cn("flex-1 h-9 rounded-lg border text-sm font-medium transition-colors cursor-pointer", form.type === "NUMERIC" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:border-blue-300")}
+                >Числовой</button>
+                <button
+                  onClick={() => setForm({ ...form, type: "BOOLEAN" })}
+                  className={cn("flex-1 h-9 rounded-lg border text-sm font-medium transition-colors cursor-pointer", form.type === "BOOLEAN" ? "bg-purple-600 text-white border-purple-600" : "bg-white text-gray-600 border-gray-200 hover:border-purple-300")}
+                >Да / Нет</button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
               <Label>Название *</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Выручка, Доля рынка..." />
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Выручка, Сертификат получен..." />
             </div>
             <div className="space-y-1.5">
               <Label>Описание</Label>
               <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Единица измерения</Label>
-                <Input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="%, руб, шт" />
+            {!isBoolForm && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Единица измерения</Label>
+                  <Input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="%, руб, шт" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Целевое значение</Label>
+                  <Input type="number" value={form.targetValue} onChange={(e) => setForm({ ...form, targetValue: e.target.value })} placeholder="100" />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label>Целевое значение</Label>
-                <Input type="number" value={form.targetValue} onChange={(e) => setForm({ ...form, targetValue: e.target.value })} placeholder="100" />
-              </div>
-            </div>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Дедлайн</Label>

@@ -12,7 +12,12 @@ export function periodLabel(period: string) {
   return `${MONTHS_RU[parseInt(month) - 1]} ${year}`;
 }
 
-export function indicatorPct(ind: { targetValue?: number | null; actualValue?: number | null; values?: { value: number }[] }): number | null {
+export function indicatorPct(ind: { type?: string | null; targetValue?: number | null; actualValue?: number | null; values?: { value: number }[] }): number | null {
+  if (ind.type === "BOOLEAN") {
+    const actual = ind.values?.[0]?.value ?? ind.actualValue;
+    if (actual == null) return 0;
+    return actual === 1 ? 100 : 0;
+  }
   if (!ind.targetValue || ind.targetValue === 0) return null;
   const actual = ind.values?.[0]?.value ?? ind.actualValue;
   if (actual == null) return 0;

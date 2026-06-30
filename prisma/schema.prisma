@@ -27,6 +27,11 @@ enum ProjectStatus {
   CANCELLED
 }
 
+enum IndicatorType {
+  NUMERIC
+  BOOLEAN
+}
+
 enum OrgUnitType {
   COMPANY
   DIVISION
@@ -173,9 +178,10 @@ model StrategyMapIndicatorEntry {
 }
 
 model Indicator {
-  id          String    @id @default(cuid())
+  id          String        @id @default(cuid())
   name        String
   description String?
+  type        IndicatorType @default(NUMERIC)
   unit        String?
   targetValue Float?
   actualValue Float?

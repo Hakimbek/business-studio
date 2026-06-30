@@ -2,6 +2,7 @@ export type Notation = "IDEF0" | "BPMN" | "EPC" | "PROCEDURE";
 export type RaciType = "RESPONSIBLE" | "ACCOUNTABLE" | "CONSULTED" | "INFORMED";
 export type OrgUnitType = "COMPANY" | "DIVISION" | "DEPARTMENT" | "GROUP";
 export type ProjectStatus = "ACTIVE" | "ON_HOLD" | "COMPLETED" | "CANCELLED";
+export type IndicatorType = "NUMERIC" | "BOOLEAN";
 
 export interface Goal {
   id: string;
@@ -30,6 +31,7 @@ export interface Indicator {
   id: string;
   name: string;
   description?: string | null;
+  type?: IndicatorType;
   unit?: string | null;
   targetValue?: number | null;
   actualValue?: number | null;
